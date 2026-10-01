@@ -144,6 +144,29 @@ class TimeClockEngine:
 
         return unreported
 
+    def has_unreported_time(self, task_id: str, include_running: bool = True) -> bool:
+        """Check if a task currently has pending unreported duration > 0."""
+        return self.get_task_unreported_duration(task_id, include_running=include_running) > 0.0
+
+    def get_unreported_tasks(self, include_running: bool = True) -> List[Task]:
+        """Return all tasks that currently have pending unreported duration > 0."""
+        return [
+            task
+            for task in self.get_tasks()
+            if self.get_task_unreported_duration(task.id, include_running=include_running) > 0.0
+        ]
+
+    def get_unreported_tasks_count(self, include_running: bool = True) -> int:
+        """Return count of tasks with pending unreported duration > 0."""
+        return len(self.get_unreported_tasks(include_running=include_running))
+
+    def get_total_unreported_duration(self, include_running: bool = True) -> float:
+        """Return the sum of unreported duration across all tasks."""
+        return sum(
+            self.get_task_unreported_duration(task.id, include_running=include_running)
+            for task in self.get_tasks()
+        )
+
     def get_task(self, task_id: str) -> Optional[Task]:
         """Retrieve task by id."""
         return self.state.tasks.get(task_id)

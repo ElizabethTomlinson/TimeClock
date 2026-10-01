@@ -54,6 +54,9 @@ class TaskPanel(ttk.LabelFrame):
         self.tree.column("total_time", width=80, anchor=tk.E)
         self.tree.column("unreported_time", width=80, anchor=tk.E)
 
+        self.tree.tag_configure("has_unreported", foreground="#005fb8")
+        self.tree.tag_configure("all_reported", foreground="#666666")
+
         scrollbar = ttk.Scrollbar(list_frame, orient=tk.VERTICAL, command=self.tree.yview)
         self.tree.configure(yscrollcommand=scrollbar.set)
 
@@ -61,6 +64,19 @@ class TaskPanel(ttk.LabelFrame):
         scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
 
         self.tree.bind("<<TreeviewSelect>>", self._on_tree_select)
+
+        # Summary Section
+        summary_frame = ttk.Frame(self)
+        summary_frame.pack(fill=tk.X, pady=(6, 0))
+
+        self.summary_var = tk.StringVar(value="Unreported: 0 projects (00:00:00)")
+        self.summary_lbl = ttk.Label(
+            summary_frame,
+            textvariable=self.summary_var,
+            font=("Helvetica", 9, "italic"),
+            anchor=tk.W,
+        )
+        self.summary_lbl.pack(side=tk.LEFT, fill=tk.X, expand=True)
 
         # Management Buttons Section
         btn_frame = ttk.Frame(self)
@@ -81,7 +97,9 @@ class TaskPanel(ttk.LabelFrame):
         self.engine.event_bus.subscribe(EventType.TASK_RENAMED, self._on_task_renamed_event)
         self.engine.event_bus.subscribe(EventType.TASK_SELECTED, self._on_task_selected_event)
         self.engine.event_bus.subscribe(EventType.TASK_REPORTED, self._on_task_reported_event)
+        self.engine.event_bus.subscribe(EventType.CLOCK_IN, self._on_clock_in_event)
         self.engine.event_bus.subscribe(EventType.CLOCK_OUT, self._on_clock_out_event)
+        self.engine.event_bus.subscribe(EventType.TICK, self._on_tick_event)
         self.engine.event_bus.subscribe(EventType.STATE_LOADED, self._on_state_loaded_event)
 
     def _on_add_task(self) -> None:
@@ -201,6 +219,13 @@ class TaskPanel(ttk.LabelFrame):
             except Exception as e:
                 messagebox.showerror("Error", str(e))
 
+    def _update_summary(self) -> None:
+        """Update aggregate unreported tasks count and total unreported duration."""
+        count = self.engine.get_unreported_tasks_count(include_running=True)
+        total_unrep = self.engine.get_total_unreported_duration(include_running=True)
+        project_text = "project" if count == 1 else "projects"
+        self.summary_var.set(f"Unreported: {count} {project_text} ({format_duration(total_unrep)})")
+
     def refresh_task_list(self) -> None:
         """Reload all tasks in the treeview and select the active task."""
         self._updating_selection = True
@@ -212,8 +237,10 @@ class TaskPanel(ttk.LabelFrame):
             tasks = self.engine.get_tasks()
             for task in tasks:
                 total_str = format_duration(task.total_duration_seconds)
-                unrep_str = format_duration(task.calculate_unreported_duration())
-                self.tree.insert("", tk.END, iid=task.id, values=(task.name, total_str, unrep_str))
+                unrep_dur = self.engine.get_task_unreported_duration(task.id, include_running=True)
+                unrep_str = format_duration(unrep_dur)
+                tag = "has_unreported" if unrep_dur > 0.0 else "all_reported"
+                self.tree.insert("", tk.END, iid=task.id, values=(task.name, total_str, unrep_str), tags=(tag,))
 
             active_id = self.engine.state.active_task_id
             if active_id and self.tree.exists(active_id):
@@ -221,14 +248,19 @@ class TaskPanel(ttk.LabelFrame):
                 self.tree.focus(active_id)
         finally:
             self._updating_selection = False
+        self._update_summary()
 
     def update_task_duration(self, task_id: str, duration_seconds: float) -> None:
         """Update the displayed total and unreported time for a specific task row."""
         if self.tree.exists(task_id):
             task = self.engine.get_task(task_id)
             if task:
+                unrep_dur = self.engine.get_task_unreported_duration(task_id, include_running=True)
                 self.tree.set(task_id, "total_time", format_duration(duration_seconds))
-                self.tree.set(task_id, "unreported_time", format_duration(task.calculate_unreported_duration()))
+                self.tree.set(task_id, "unreported_time", format_duration(unrep_dur))
+                tag = "has_unreported" if unrep_dur > 0.0 else "all_reported"
+                self.tree.item(task_id, tags=(tag,))
+                self._update_summary()
 
     def _on_task_created_event(self, event: Event) -> None:
         self.refresh_task_list()
@@ -252,8 +284,33 @@ class TaskPanel(ttk.LabelFrame):
     def _on_task_reported_event(self, event: Event) -> None:
         self.refresh_task_list()
 
+    def _on_clock_in_event(self, event: Event) -> None:
+        data = event.data or {}
+        task_id = data.get("task_id")
+        if task_id and self.tree.exists(task_id):
+            unrep_dur = self.engine.get_task_unreported_duration(task_id, include_running=True)
+            self.tree.set(task_id, "unreported_time", format_duration(unrep_dur))
+            tag = "has_unreported" if unrep_dur > 0.0 else "all_reported"
+            self.tree.item(task_id, tags=(tag,))
+            self._update_summary()
+
     def _on_clock_out_event(self, event: Event) -> None:
         self.refresh_task_list()
+
+    def _on_tick_event(self, event: Event) -> None:
+        data = event.data or {}
+        if not data.get("is_running"):
+            return
+        active_id = data.get("active_task_id")
+        if not active_id or not self.tree.exists(active_id):
+            return
+        total_sec = data.get("total_duration", 0.0)
+        unrep_sec = data.get("unreported_duration", 0.0)
+        self.tree.set(active_id, "total_time", format_duration(total_sec))
+        self.tree.set(active_id, "unreported_time", format_duration(unrep_sec))
+        tag = "has_unreported" if unrep_sec > 0.0 else "all_reported"
+        self.tree.item(active_id, tags=(tag,))
+        self._update_summary()
 
     def _on_state_loaded_event(self, event: Event) -> None:
         self.refresh_task_list()

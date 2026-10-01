@@ -57,6 +57,12 @@ The Time Clock window is organized into three intuitive areas:
 
 The **Tasks** panel on the left allows you to organize your work into discrete tasks or projects.
 
+### Task List & Unreported Time Indicators
+The task table displays your tasks alongside their **Total Time** and **Unreported Time**:
+- **Visual Status Highlighting**: Tasks containing pending unreported time (`> 00:00:00`) are prominently highlighted in blue text so you can immediately see which projects need to be billed or submitted. Fully reported tasks (`00:00:00` unreported) remain in neutral gray.
+- **Live Synchronization**: As you clock in, clock out, or track active work, the task's unreported time counter and highlight tag update automatically in real time.
+- **Aggregate Summary Indicator**: A footer summary below the task list displays the total number of projects with outstanding work and cumulative pending duration (e.g., `Unreported: 2 projects (04:15:00)`), allowing you to assess your pending reporting workload at a glance.
+
 ### Adding a Task
 1. Click the text box at the top of the Tasks panel labeled with an entry field.
 2. Type the name of your task (e.g., `Client Website Redesign`, `Bug Fixes`, `Admin & Emails`).
@@ -129,9 +135,12 @@ Click the **Report...** button in the Tasks panel (or **Mark Reported** in the C
    - Returns all historical sessions to an unreported state, making your **Unreported Time** equal to your **Total Time**.
 
 ### Visual Indicators
-In the **Session History** table:
-- **Reported Sessions** are displayed in gray/dimmed text.
-- **Unreported Sessions** are displayed in normal, prominent text.
+- **Tasks List**:
+  - Projects with pending unreported time (`> 00:00:00`) are highlighted in bold blue text with an aggregate unreported summary indicator in the footer.
+  - Fully reported projects (`00:00:00`) appear in neutral muted text.
+- **Session History Table**:
+  - **Reported Sessions** are displayed in gray/dimmed text.
+  - **Unreported Sessions** are displayed in normal, prominent text.
 
 ---
 

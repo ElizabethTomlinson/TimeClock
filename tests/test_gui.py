@@ -10,6 +10,7 @@ from unittest.mock import patch
 from time_clock.engine import TimeClockEngine
 from time_clock.events import EventBus
 from time_clock.gui.app import TimeClockApp
+from time_clock.models import TimeEntry
 from time_clock.storage import SQLiteStorage
 
 
@@ -141,6 +142,116 @@ class TestGUI(unittest.TestCase):
         self.assertIn("Sessions: 1", summary)
         self.assertIn("Total:", summary)
         self.assertIn("Unreported:", summary)
+
+    def test_task_panel_unreported_tag_assignment(self):
+        app = TimeClockApp(root=self.root, engine=self.engine)
+        task = self.engine.create_task("Tagged Task")
+        self.root.update_idletasks()
+
+        # Initially 0 sessions -> all_reported
+        tags = app.task_panel.tree.item(task.id, "tags")
+        self.assertEqual(tags, ("all_reported",))
+
+        # Add a completed session in the past -> has_unreported
+        task.entries.append(
+            TimeEntry(
+                id="e1",
+                start_time="2020-01-01T10:00:00",
+                end_time="2020-01-01T11:00:00",
+                duration_seconds=3600.0,
+            )
+        )
+        self.engine._save_state()
+        app.task_panel.refresh_task_list()
+        self.root.update_idletasks()
+
+        tags = app.task_panel.tree.item(task.id, "tags")
+        self.assertEqual(tags, ("has_unreported",))
+        self.assertEqual(app.task_panel.tree.set(task.id, "unreported_time"), "01:00:00")
+
+        # Mark reported -> all_reported
+        self.engine.mark_task_reported(task.id)
+        self.root.update_idletasks()
+
+        tags = app.task_panel.tree.item(task.id, "tags")
+        self.assertEqual(tags, ("all_reported",))
+        self.assertEqual(app.task_panel.tree.set(task.id, "unreported_time"), "00:00:00")
+
+        # Clear reported -> has_unreported
+        self.engine.clear_task_reported(task.id)
+        self.root.update_idletasks()
+
+        tags = app.task_panel.tree.item(task.id, "tags")
+        self.assertEqual(tags, ("has_unreported",))
+        self.assertEqual(app.task_panel.tree.set(task.id, "unreported_time"), "01:00:00")
+
+    def test_task_panel_aggregate_unreported_summary(self):
+        app = TimeClockApp(root=self.root, engine=self.engine)
+        t1 = self.engine.create_task("Task Alpha")
+        t2 = self.engine.create_task("Task Beta")
+        self.root.update_idletasks()
+
+        self.assertEqual(app.task_panel.summary_var.get(), "Unreported: 0 projects (00:00:00)")
+
+        # Log session on t1
+        t1.entries.append(
+            TimeEntry(
+                id="e1",
+                start_time="2020-01-01T10:00:00",
+                end_time="2020-01-01T11:00:00",
+                duration_seconds=3600.0,
+            )
+        )
+        self.engine._save_state()
+        app.task_panel.refresh_task_list()
+        self.root.update_idletasks()
+
+        self.assertTrue(app.task_panel.summary_var.get().startswith("Unreported: 1 project ("))
+
+        # Log session on t2
+        t2.entries.append(
+            TimeEntry(
+                id="e2",
+                start_time="2020-01-01T11:00:00",
+                end_time="2020-01-01T12:00:00",
+                duration_seconds=3600.0,
+            )
+        )
+        self.engine._save_state()
+        app.task_panel.refresh_task_list()
+        self.root.update_idletasks()
+
+        self.assertTrue(app.task_panel.summary_var.get().startswith("Unreported: 2 projects ("))
+
+        # Mark t1 reported
+        self.engine.mark_task_reported(t1.id)
+        self.root.update_idletasks()
+
+        self.assertTrue(app.task_panel.summary_var.get().startswith("Unreported: 1 project ("))
+
+        # Delete t2
+        self.engine.delete_task(t2.id)
+        self.root.update_idletasks()
+
+        self.assertEqual(app.task_panel.summary_var.get(), "Unreported: 0 projects (00:00:00)")
+
+    def test_task_panel_live_tick_unreported_update(self):
+        app = TimeClockApp(root=self.root, engine=self.engine)
+        task = self.engine.create_task("Live Tick Task")
+        self.root.update_idletasks()
+
+        self.assertEqual(app.task_panel.tree.item(task.id, "tags"), ("all_reported",))
+
+        # Clock in
+        self.engine.clock_in()
+        self.root.update_idletasks()
+
+        # Tick
+        self.engine.tick()
+        self.root.update_idletasks()
+
+        self.assertEqual(app.task_panel.tree.item(task.id, "tags"), ("has_unreported",))
+        self.assertTrue(app.task_panel.summary_var.get().startswith("Unreported: 1 project ("))
 
 
 if __name__ == "__main__":

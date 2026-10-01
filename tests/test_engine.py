@@ -226,6 +226,52 @@ class TestTimeClockEngine(unittest.TestCase):
         # Non-existent task returns 0.0
         self.assertEqual(self.engine.get_task_unreported_duration("unknown"), 0.0)
 
+    def test_get_unreported_tasks_query(self):
+        t1 = self.engine.create_task("Project 1")
+        t2 = self.engine.create_task("Project 2")
+        t3 = self.engine.create_task("Project 3")
+
+        # Initially, 0 unreported tasks
+        self.assertEqual(self.engine.get_unreported_tasks(), [])
+        self.assertEqual(self.engine.get_unreported_tasks_count(), 0)
+        self.assertEqual(self.engine.get_total_unreported_duration(), 0.0)
+        self.assertFalse(self.engine.has_unreported_time(t1.id))
+
+        # Add completed entry to t1
+        t1.entries.append(
+            TimeEntry(
+                id="e1",
+                start_time="2026-10-01T10:00:00",
+                end_time="2026-10-01T11:00:00",
+                duration_seconds=3600.0,
+            )
+        )
+        self.engine._save_state()
+
+        self.assertTrue(self.engine.has_unreported_time(t1.id))
+        self.assertFalse(self.engine.has_unreported_time(t2.id))
+        self.assertEqual(self.engine.get_unreported_tasks_count(), 1)
+        self.assertEqual([t.id for t in self.engine.get_unreported_tasks()], [t1.id])
+        self.assertEqual(self.engine.get_total_unreported_duration(), 3600.0)
+
+        # Active running session on t2
+        self.engine.select_task(t2.id)
+        self.engine.clock_in()
+
+        # With include_running=True (default), t2 is also counted
+        self.assertTrue(self.engine.has_unreported_time(t2.id, include_running=True))
+        self.assertEqual(self.engine.get_unreported_tasks_count(include_running=True), 2)
+        # With include_running=False, t2 has 0 recorded entries yet
+        self.assertFalse(self.engine.has_unreported_time(t2.id, include_running=False))
+        self.assertEqual(self.engine.get_unreported_tasks_count(include_running=False), 1)
+
+        self.engine.clock_out()
+        # Mark t1 as reported
+        self.engine.mark_task_reported(t1.id, "2026-10-01T12:00:00")
+        self.assertFalse(self.engine.has_unreported_time(t1.id))
+        self.assertEqual(self.engine.get_unreported_tasks_count(), 1)
+        self.assertEqual([t.id for t in self.engine.get_unreported_tasks()], [t2.id])
+
 
 if __name__ == "__main__":
     unittest.main()
