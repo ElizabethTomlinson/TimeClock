@@ -40,8 +40,8 @@ class TimeClockApp:
 
     def _configure_window(self) -> None:
         self.root.title("Time Clock")
-        self.root.geometry("820x540")
-        self.root.minsize(720, 460)
+        self.root.geometry("1424x680")
+        self.root.minsize(820, 520)
 
     def _setup_styles(self) -> None:
         self.style = ttk.Style(self.root)

@@ -72,11 +72,45 @@ class TimeClockEngine:
         del self.state.tasks[task_id]
 
         if self.state.active_task_id == task_id:
-            remaining_ids = list(self.state.tasks.keys())
-            self.state.active_task_id = remaining_ids[0] if remaining_ids else None
+            remaining_tasks = [t for t in self.state.tasks.values() if not t.is_archived]
+            self.state.active_task_id = remaining_tasks[0].id if remaining_tasks else None
 
         self._save_state()
         self.event_bus.emit(EventType.TASK_DELETED, {"task_id": task_id})
+
+    def archive_task(self, task_id: str) -> Task:
+        """Archive a task. If it is currently running, clock out first."""
+        if task_id not in self.state.tasks:
+            raise KeyError(f"Task with id '{task_id}' not found.")
+
+        if self.state.is_running and self.state.active_task_id == task_id:
+            self.clock_out()
+
+        task = self.state.tasks[task_id]
+        task.is_archived = True
+
+        if self.state.active_task_id == task_id:
+            remaining_tasks = [t for t in self.state.tasks.values() if not t.is_archived]
+            self.state.active_task_id = remaining_tasks[0].id if remaining_tasks else None
+
+        self._save_state()
+        self.event_bus.emit(EventType.TASK_ARCHIVED, task)
+        return task
+
+    def unarchive_task(self, task_id: str) -> Task:
+        """Unarchive a task and restore it to the active task list."""
+        if task_id not in self.state.tasks:
+            raise KeyError(f"Task with id '{task_id}' not found.")
+
+        task = self.state.tasks[task_id]
+        task.is_archived = False
+
+        if self.state.active_task_id is None:
+            self.state.active_task_id = task_id
+
+        self._save_state()
+        self.event_bus.emit(EventType.TASK_UNARCHIVED, task)
+        return task
 
     def rename_task(self, task_id: str, new_name: str) -> Task:
         """Rename an existing task."""
@@ -177,9 +211,13 @@ class TimeClockEngine:
             return self.state.tasks.get(self.state.active_task_id)
         return None
 
-    def get_tasks(self) -> List[Task]:
-        """Retrieve all tasks."""
-        return list(self.state.tasks.values())
+    def get_tasks(self, include_archived: bool = False) -> List[Task]:
+        """Retrieve tasks, optionally including archived tasks."""
+        return [t for t in self.state.tasks.values() if include_archived or not t.is_archived]
+
+    def get_archived_tasks(self) -> List[Task]:
+        """Retrieve only archived tasks."""
+        return [t for t in self.state.tasks.values() if t.is_archived]
 
     def get_task_history(self, task_id: str) -> List[TimeEntry]:
         """Retrieve historical session entries for a task."""

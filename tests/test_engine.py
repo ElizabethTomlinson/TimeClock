@@ -272,6 +272,120 @@ class TestTimeClockEngine(unittest.TestCase):
         self.assertEqual(self.engine.get_unreported_tasks_count(), 1)
         self.assertEqual([t.id for t in self.engine.get_unreported_tasks()], [t2.id])
 
+    def test_archive_task_success(self):
+        t1 = self.engine.create_task("Task 1")
+        t2 = self.engine.create_task("Task 2")
+        self.engine.select_task(t1.id)
+
+        events = []
+        self.bus.subscribe(EventType.TASK_ARCHIVED, lambda e: events.append(e))
+
+        archived = self.engine.archive_task(t1.id)
+        self.assertTrue(archived.is_archived)
+        self.assertEqual(len(events), 1)
+        self.assertEqual(events[0].data.id, t1.id)
+        # active task falls back to t2
+        self.assertEqual(self.engine.state.active_task_id, t2.id)
+
+        # verify persisted
+        reloaded = self.storage.load()
+        self.assertTrue(reloaded.tasks[t1.id].is_archived)
+
+        with self.assertRaises(KeyError):
+            self.engine.archive_task("non_existent")
+
+    def test_archive_active_running_task_auto_clocks_out(self):
+        t1 = self.engine.create_task("Running Task")
+        t2 = self.engine.create_task("Backup Task")
+        self.engine.select_task(t1.id)
+        self.engine.clock_in()
+
+        self.assertTrue(self.engine.state.is_running)
+
+        clock_out_events = []
+        archive_events = []
+        self.bus.subscribe(EventType.CLOCK_OUT, lambda e: clock_out_events.append(e))
+        self.bus.subscribe(EventType.TASK_ARCHIVED, lambda e: archive_events.append(e))
+
+        self.engine.archive_task(t1.id)
+
+        self.assertFalse(self.engine.state.is_running)
+        self.assertIsNone(self.engine.state.current_session_start)
+        self.assertEqual(len(clock_out_events), 1)
+        self.assertEqual(len(archive_events), 1)
+        self.assertEqual(len(t1.entries), 1)
+        self.assertEqual(self.engine.state.active_task_id, t2.id)
+
+    def test_archive_only_task_clears_active_selection(self):
+        t1 = self.engine.create_task("Sole Task")
+        self.assertEqual(self.engine.state.active_task_id, t1.id)
+
+        self.engine.archive_task(t1.id)
+        self.assertIsNone(self.engine.state.active_task_id)
+
+    def test_unarchive_task(self):
+        t1 = self.engine.create_task("Archived Task")
+        self.engine.archive_task(t1.id)
+        self.assertTrue(t1.is_archived)
+        self.assertIsNone(self.engine.state.active_task_id)
+
+        events = []
+        self.bus.subscribe(EventType.TASK_UNARCHIVED, lambda e: events.append(e))
+
+        restored = self.engine.unarchive_task(t1.id)
+        self.assertFalse(restored.is_archived)
+        self.assertEqual(len(events), 1)
+        self.assertEqual(events[0].data.id, t1.id)
+        # Because active_task_id was None, restored task becomes active
+        self.assertEqual(self.engine.state.active_task_id, t1.id)
+
+        # verify persisted
+        reloaded = self.storage.load()
+        self.assertFalse(reloaded.tasks[t1.id].is_archived)
+
+        with self.assertRaises(KeyError):
+            self.engine.unarchive_task("bad_id")
+
+    def test_get_tasks_filtering(self):
+        t1 = self.engine.create_task("Active Task 1")
+        t2 = self.engine.create_task("Active Task 2")
+        t3 = self.engine.create_task("Archived Task")
+        self.engine.archive_task(t3.id)
+
+        active_tasks = self.engine.get_tasks(include_archived=False)
+        self.assertEqual(len(active_tasks), 2)
+        self.assertEqual({t.id for t in active_tasks}, {t1.id, t2.id})
+
+        all_tasks = self.engine.get_tasks(include_archived=True)
+        self.assertEqual(len(all_tasks), 3)
+        self.assertEqual({t.id for t in all_tasks}, {t1.id, t2.id, t3.id})
+
+        archived_tasks = self.engine.get_archived_tasks()
+        self.assertEqual(len(archived_tasks), 1)
+        self.assertEqual(archived_tasks[0].id, t3.id)
+
+    def test_unreported_queries_exclude_archived_tasks(self):
+        t_active = self.engine.create_task("Active with time")
+        t_archived = self.engine.create_task("Archived with time")
+
+        t_active.entries.append(
+            TimeEntry(id="e1", start_time="2026-10-01T08:00:00", end_time="2026-10-01T09:00:00", duration_seconds=3600.0)
+        )
+        t_archived.entries.append(
+            TimeEntry(id="e2", start_time="2026-10-01T08:00:00", end_time="2026-10-01T09:00:00", duration_seconds=3600.0)
+        )
+        self.engine._save_state()
+
+        self.assertEqual(self.engine.get_unreported_tasks_count(), 2)
+        self.assertEqual(self.engine.get_total_unreported_duration(), 7200.0)
+
+        # Archive t_archived
+        self.engine.archive_task(t_archived.id)
+
+        self.assertEqual(self.engine.get_unreported_tasks_count(), 1)
+        self.assertEqual([t.id for t in self.engine.get_unreported_tasks()], [t_active.id])
+        self.assertEqual(self.engine.get_total_unreported_duration(), 3600.0)
+
 
 if __name__ == "__main__":
     unittest.main()

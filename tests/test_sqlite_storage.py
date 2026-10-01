@@ -253,6 +253,29 @@ class TestSQLiteStorage(unittest.TestCase):
         loaded = self.storage.load()
         self.assertEqual(loaded.tasks["t_reported"].last_reported_at, "2026-10-01T12:00:00")
 
+    def test_sqlite_save_and_load_is_archived(self):
+        task_active = Task(
+            id="t_active",
+            name="Active Task",
+            created_at="2026-10-01T08:00:00",
+            is_archived=False,
+        )
+        task_archived = Task(
+            id="t_archived",
+            name="Archived Task",
+            created_at="2026-10-01T08:30:00",
+            is_archived=True,
+        )
+        state = AppState(
+            tasks={"t_active": task_active, "t_archived": task_archived},
+            active_task_id="t_active",
+        )
+        self.storage.save(state)
+
+        loaded = self.storage.load()
+        self.assertFalse(loaded.tasks["t_active"].is_archived)
+        self.assertTrue(loaded.tasks["t_archived"].is_archived)
+
     def test_sqlite_migration_adds_last_reported_at_column(self):
         # Create an old schema database without last_reported_at column
         legacy_db = self.test_dir / "old_schema.db"
@@ -299,6 +322,55 @@ class TestSQLiteStorage(unittest.TestCase):
 
         reloaded = storage.load()
         self.assertEqual(reloaded.tasks["t_old"].last_reported_at, "2026-09-01T10:00:00")
+        storage.close()
+
+    def test_sqlite_migration_adds_is_archived_column(self):
+        # Create an old schema database without is_archived column
+        legacy_db = self.test_dir / "old_schema_no_archive.db"
+        with sqlite3.connect(legacy_db) as conn:
+            conn.execute("""
+                CREATE TABLE tasks (
+                    id TEXT PRIMARY KEY,
+                    name TEXT NOT NULL,
+                    created_at TEXT NOT NULL,
+                    last_reported_at TEXT
+                );
+            """)
+            conn.execute("""
+                CREATE TABLE time_entries (
+                    id TEXT PRIMARY KEY,
+                    task_id TEXT NOT NULL,
+                    start_time TEXT NOT NULL,
+                    end_time TEXT,
+                    duration_seconds REAL NOT NULL DEFAULT 0.0,
+                    FOREIGN KEY (task_id) REFERENCES tasks(id) ON DELETE CASCADE
+                );
+            """)
+            conn.execute("""
+                CREATE TABLE app_state (
+                    key TEXT PRIMARY KEY,
+                    active_task_id TEXT,
+                    is_running INTEGER NOT NULL DEFAULT 0,
+                    current_session_start TEXT,
+                    FOREIGN KEY (active_task_id) REFERENCES tasks(id) ON DELETE SET NULL
+                );
+            """)
+            conn.execute("INSERT INTO tasks (id, name, created_at) VALUES ('t_old2', 'Old Task 2', '2026-09-01T00:00:00');")
+            conn.commit()
+
+        # Open with SQLiteStorage which triggers column migration
+        storage = SQLiteStorage(db_path=legacy_db)
+        loaded = storage.load()
+        self.assertIn("t_old2", loaded.tasks)
+        self.assertEqual(loaded.tasks["t_old2"].name, "Old Task 2")
+        self.assertFalse(loaded.tasks["t_old2"].is_archived)
+
+        # Update is_archived and save
+        loaded.tasks["t_old2"].is_archived = True
+        storage.save(loaded)
+
+        reloaded = storage.load()
+        self.assertTrue(reloaded.tasks["t_old2"].is_archived)
         storage.close()
 
 

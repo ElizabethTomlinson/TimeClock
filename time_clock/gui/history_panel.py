@@ -113,6 +113,8 @@ class HistoryPanel(ttk.LabelFrame):
 
     def _register_events(self) -> None:
         self.engine.event_bus.subscribe(EventType.TASK_CREATED, self._on_task_created_event)
+        self.engine.event_bus.subscribe(EventType.TASK_ARCHIVED, self._on_task_archived_event)
+        self.engine.event_bus.subscribe(EventType.TASK_UNARCHIVED, self._on_task_unarchived_event)
         self.engine.event_bus.subscribe(EventType.CLOCK_OUT, self._on_clock_out_event)
         self.engine.event_bus.subscribe(EventType.TASK_SELECTED, self._on_task_selected_event)
         self.engine.event_bus.subscribe(EventType.TASK_DELETED, self._on_task_deleted_event)
@@ -156,6 +158,12 @@ class HistoryPanel(ttk.LabelFrame):
         self.summary_var.set(f"Sessions: {len(entries)} | Total: {total_str} | Unreported: {unrep_str}")
 
     def _on_task_created_event(self, event: Event) -> None:
+        self.refresh_history()
+
+    def _on_task_archived_event(self, event: Event) -> None:
+        self.refresh_history()
+
+    def _on_task_unarchived_event(self, event: Event) -> None:
         self.refresh_history()
 
     def _on_clock_out_event(self, event: Event) -> None:

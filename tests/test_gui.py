@@ -253,6 +253,146 @@ class TestGUI(unittest.TestCase):
         self.assertEqual(app.task_panel.tree.item(task.id, "tags"), ("has_unreported",))
         self.assertTrue(app.task_panel.summary_var.get().startswith("Unreported: 1 project ("))
 
+    @patch("time_clock.gui.task_panel.simpledialog.askstring")
+    def test_task_panel_dialog_add_task_success(self, mock_askstring):
+        mock_askstring.return_value = "Dialog Project"
+        app = TimeClockApp(root=self.root, engine=self.engine)
+        self.root.update_idletasks()
+
+        app.task_panel._on_add_task()
+        self.root.update_idletasks()
+
+        tasks = self.engine.get_tasks()
+        self.assertEqual(len(tasks), 1)
+        self.assertEqual(tasks[0].name, "Dialog Project")
+        children = app.task_panel.tree.get_children()
+        self.assertEqual(len(children), 1)
+        self.assertEqual(app.task_panel.tree.item(children[0], "values")[0], "Dialog Project")
+
+    @patch("time_clock.gui.task_panel.simpledialog.askstring")
+    def test_task_panel_dialog_add_task_cancelled(self, mock_askstring):
+        mock_askstring.return_value = None
+        app = TimeClockApp(root=self.root, engine=self.engine)
+        self.root.update_idletasks()
+
+        app.task_panel._on_add_task()
+        self.root.update_idletasks()
+
+        tasks = self.engine.get_tasks()
+        self.assertEqual(len(tasks), 0)
+        self.assertEqual(len(app.task_panel.tree.get_children()), 0)
+
+    @patch("time_clock.gui.task_panel.messagebox.showwarning")
+    @patch("time_clock.gui.task_panel.simpledialog.askstring")
+    def test_task_panel_dialog_add_task_empty(self, mock_askstring, mock_showwarning):
+        mock_askstring.return_value = "   "
+        app = TimeClockApp(root=self.root, engine=self.engine)
+        self.root.update_idletasks()
+
+        app.task_panel._on_add_task()
+        self.root.update_idletasks()
+
+        mock_showwarning.assert_called_once()
+        tasks = self.engine.get_tasks()
+        self.assertEqual(len(tasks), 0)
+
+    @patch("time_clock.gui.task_panel.messagebox.showerror")
+    @patch("time_clock.gui.task_panel.simpledialog.askstring")
+    def test_task_panel_dialog_add_task_error(self, mock_askstring, mock_showerror):
+        mock_askstring.return_value = "Error Project"
+        app = TimeClockApp(root=self.root, engine=self.engine)
+        self.root.update_idletasks()
+
+        with patch.object(self.engine, "create_task", side_effect=ValueError("Simulated creation failure")):
+            app.task_panel._on_add_task()
+            self.root.update_idletasks()
+
+        mock_showerror.assert_called_once()
+
+    def test_app_window_configuration(self):
+        app = TimeClockApp(root=self.root, engine=self.engine)
+        self.assertEqual(self.root.title(), "Time Clock")
+        self.assertEqual(self.root.minsize(), (820, 520))
+
+    def test_task_panel_show_archived_filter(self):
+        app = TimeClockApp(root=self.root, engine=self.engine)
+        t1 = self.engine.create_task("Active Task")
+        t2 = self.engine.create_task("Archived Task")
+        self.engine.archive_task(t2.id)
+        self.root.update_idletasks()
+
+        # By default, show_archived_var is False -> only t1 is displayed
+        children = app.task_panel.tree.get_children()
+        self.assertEqual(len(children), 1)
+        self.assertEqual(children[0], t1.id)
+
+        # Toggle show_archived_var to True -> both t1 and t2 displayed
+        app.task_panel.show_archived_var.set(True)
+        app.task_panel.refresh_task_list()
+        self.root.update_idletasks()
+
+        children = app.task_panel.tree.get_children()
+        self.assertEqual(len(children), 2)
+        self.assertIn(t1.id, children)
+        self.assertIn(t2.id, children)
+
+        # Verify archived task display and tag
+        item_values = app.task_panel.tree.item(t2.id, "values")
+        self.assertIn("[Archived]", item_values[0])
+        self.assertEqual(app.task_panel.tree.item(t2.id, "tags"), ("archived",))
+
+    @patch("time_clock.gui.task_panel.messagebox.askyesno")
+    def test_task_panel_archive_and_unarchive_actions(self, mock_askyesno):
+        mock_askyesno.return_value = True
+        app = TimeClockApp(root=self.root, engine=self.engine)
+        t1 = self.engine.create_task("Task To Archive")
+        t2 = self.engine.create_task("Remaining Task")
+        self.engine.select_task(t1.id)
+        self.root.update_idletasks()
+
+        self.assertEqual(app.task_panel.archive_btn.cget("text"), "Archive")
+
+        # Archive t1 via button
+        app.task_panel._on_archive_toggle_clicked()
+        self.root.update_idletasks()
+
+        self.assertTrue(t1.is_archived)
+        mock_askyesno.assert_called_once()
+
+        # Turn on show archived
+        app.task_panel.show_archived_var.set(True)
+        app.task_panel.refresh_task_list()
+        self.root.update_idletasks()
+
+        # Select archived task t1
+        app.task_panel.tree.selection_set(t1.id)
+        app.task_panel._update_archive_button_state()
+        self.assertEqual(app.task_panel.archive_btn.cget("text"), "Unarchive")
+
+        # Unarchive t1
+        app.task_panel._on_archive_toggle_clicked()
+        self.root.update_idletasks()
+
+        self.assertFalse(t1.is_archived)
+
+    def test_archiving_active_task_updates_clock_and_history_panels(self):
+        app = TimeClockApp(root=self.root, engine=self.engine)
+        t1 = self.engine.create_task("Task A")
+        t2 = self.engine.create_task("Task B")
+        self.engine.select_task(t1.id)
+        self.root.update_idletasks()
+
+        self.assertIn("Task A", app.clock_panel.task_title_var.get())
+        self.assertIn("Task A", app.history_panel.cget("text"))
+
+        # Archive Task A
+        self.engine.archive_task(t1.id)
+        self.root.update_idletasks()
+
+        # Active task switched to Task B and panels updated automatically
+        self.assertIn("Task B", app.clock_panel.task_title_var.get())
+        self.assertIn("Task B", app.history_panel.cget("text"))
+
 
 if __name__ == "__main__":
     unittest.main()

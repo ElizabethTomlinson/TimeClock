@@ -159,6 +159,62 @@ class TestIntegration(unittest.TestCase):
         )
         new_storage.close()
 
+    def test_archive_unarchive_full_lifecycle(self):
+        # 1. Create multiple tasks
+        t1 = self.engine.create_task("Alpha Project")
+        t2 = self.engine.create_task("Beta Project")
+        t3 = self.engine.create_task("Gamma Project")
+
+        # 2. Clock in and record session on t1
+        self.engine.select_task(t1.id)
+        self.engine.clock_in()
+        time.sleep(0.05)
+        self.engine.clock_out()
+        self.assertEqual(len(t1.entries), 1)
+
+        # 3. Clock in on t2, and while active, archive t2
+        self.engine.select_task(t2.id)
+        self.engine.clock_in()
+        self.assertTrue(self.engine.state.is_running)
+
+        archived_t2 = self.engine.archive_task(t2.id)
+        self.assertTrue(archived_t2.is_archived)
+        self.assertFalse(self.engine.state.is_running)
+        self.assertEqual(len(t2.entries), 1)
+        self.assertIn(self.engine.state.active_task_id, [t1.id, t3.id])
+
+        # 4. Filter verification
+        active_tasks = self.engine.get_tasks()
+        self.assertEqual(len(active_tasks), 2)
+        self.assertNotIn(t2.id, [t.id for t in active_tasks])
+
+        all_tasks = self.engine.get_tasks(include_archived=True)
+        self.assertEqual(len(all_tasks), 3)
+
+        # 5. Export with archived tasks
+        export_csv = self.test_dir / "lifecycle_export.csv"
+        self.engine.export_data(export_csv, format="csv")
+        with open(export_csv, "r", encoding="utf-8") as f:
+            reader = list(csv.DictReader(f))
+        t2_rows = [r for r in reader if r["task_id"] == t2.id]
+        self.assertEqual(len(t2_rows), 1)
+        self.assertEqual(t2_rows[0]["is_archived"], "true")
+
+        # 6. Reload from persistent storage
+        reopened_storage = SQLiteStorage(self.db_file)
+        reopened_engine = TimeClockEngine(storage=reopened_storage)
+
+        self.assertEqual(len(reopened_engine.get_tasks()), 2)
+        self.assertEqual(len(reopened_engine.get_archived_tasks()), 1)
+
+        # 7. Unarchive t2
+        restored_t2 = reopened_engine.unarchive_task(t2.id)
+        self.assertFalse(restored_t2.is_archived)
+        self.assertEqual(len(reopened_engine.get_tasks()), 3)
+        self.assertEqual(len(restored_t2.entries), 1)
+        self.assertGreater(restored_t2.total_duration_seconds, 0)
+        reopened_storage.close()
+
 
 if __name__ == "__main__":
     unittest.main()

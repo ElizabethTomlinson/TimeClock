@@ -60,8 +60,25 @@ class TestModels(unittest.TestCase):
         self.assertEqual(restored.name, task.name)
         self.assertEqual(restored.created_at, task.created_at)
         self.assertEqual(restored.last_reported_at, "2026-09-30T09:30:00")
+        self.assertFalse(restored.is_archived)
         self.assertEqual(len(restored.entries), 1)
         self.assertEqual(restored.entries[0].duration_seconds, 1800.0)
+
+    def test_task_archive_serialization(self):
+        task = Task(
+            id="t-archived",
+            name="Old Project",
+            created_at="2026-09-01T08:00:00",
+            is_archived=True,
+        )
+        data = task.to_dict()
+        self.assertTrue(data.get("is_archived"))
+        restored = Task.from_dict(data)
+        self.assertTrue(restored.is_archived)
+
+        # Default is_archived when missing
+        restored_default = Task.from_dict({"id": "t2", "name": "Active", "created_at": "2026-09-01T08:00:00"})
+        self.assertFalse(restored_default.is_archived)
 
     def test_unreported_duration_no_cutoff(self):
         task = Task(

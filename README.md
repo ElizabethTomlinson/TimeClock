@@ -36,9 +36,9 @@ The Time Clock window is organized into three intuitive areas:
 +------------------------------------+------------------------------------+
 |  Tasks Panel (Left)                |  Clock Tracker (Top Right)         |
 |  - Add new tasks                   |  - Active task status & timer      |
-|  - Select, rename, or delete tasks |  - Clock In / Clock Out button     |
-|  - View total & unreported times   |  - Mark Reported button            |
-|                                    +------------------------------------+
+|  - Select, rename, archive, delete |  - Clock In / Clock Out button     |
+|  - Show/hide archived tasks        |  - Mark Reported button            |
+|  - View total & unreported times   +------------------------------------+
 |                                    |  Session History (Bottom Right)    |
 |                                    |  - Detailed session timestamps     |
 |                                    |  - Reported vs unreported status   |
@@ -64,10 +64,10 @@ The task table displays your tasks alongside their **Total Time** and **Unreport
 - **Aggregate Summary Indicator**: A footer summary below the task list displays the total number of projects with outstanding work and cumulative pending duration (e.g., `Unreported: 2 projects (04:15:00)`), allowing you to assess your pending reporting workload at a glance.
 
 ### Adding a Task
-1. Click the text box at the top of the Tasks panel labeled with an entry field.
-2. Type the name of your task (e.g., `Client Website Redesign`, `Bug Fixes`, `Admin & Emails`).
-3. Click **Add Task** or press **Enter / Return** on your keyboard.
-4. Your new task appears in the task list below.
+1. Click the **New Task...** button at the top of the Tasks panel.
+2. Enter or paste the name of your task into the popup dialog (e.g., `Client Website Redesign`, `Bug Fixes`, `Admin & Emails`).
+3. Click **OK** or press **Enter / Return** on your keyboard.
+4. Your new task appears in the task list below and is automatically selected.
 
 ### Selecting a Task
 - Click on any task in the list to select it.
@@ -78,6 +78,23 @@ The task table displays your tasks alongside their **Total Time** and **Unreport
 2. Click the **Rename** button below the task list.
 3. Enter the new name in the popup dialog and confirm.
 4. The task list and timer header will immediately reflect the updated name.
+
+### Archiving and Unarchiving Tasks
+Archiving allows you to keep your active task list organized and focused without losing any tracked work sessions, total duration, or historical reporting metrics:
+- **Archiving a Task**:
+  1. Click on the task in the list that you wish to archive.
+  2. Click the **Archive** button below the task list and confirm in the dialog prompt.
+  3. The task is removed from the default active task list.
+  4. If the task was actively clocked in when archived, the running session is automatically and safely finalized and saved.
+  5. The application will automatically switch active selection to the next available unarchived task.
+- **Viewing Archived Tasks**:
+  - Check the **Show Archived** box at the top right of the Tasks panel.
+  - Archived tasks will appear in the task list with an `[Archived]` tag and muted gray text.
+- **Unarchiving a Task**:
+  1. Enable the **Show Archived** checkbox.
+  2. Click on the archived task you want to restore.
+  3. The management button will dynamically change to **Unarchive**.
+  4. Click **Unarchive** to restore the task to the active list.
 
 ### Deleting a Task
 1. Click the task you want to remove.
@@ -172,15 +189,15 @@ To export history for only the currently selected task:
 1. Select the desired task from the Tasks list.
 2. In the **Session History** panel, click the **Export...** button in the bottom left corner.
 3. Choose your preferred file format:
-   - **CSV (`.csv`)**: Ideal for spreadsheets. Includes task details, start time, end time, and duration in seconds.
+   - **CSV (`.csv`)**: Ideal for spreadsheets. Includes task details, archive status, start time, end time, and duration in seconds.
    - **JSON (`.json`)**: Ideal for technical workflows or importing into other tools.
 4. Choose where to save the file and click **Save**.
 
 ### 2. Exporting All Application Data
-To export all tasks and all session records across the entire application at once:
+To export all tasks (including active and archived projects) and all session records across the entire application at once:
 1. Click the **File** menu in the top menu bar.
 2. Select either:
-   - **Export Data as CSV...**: Saves a comprehensive spreadsheet containing every task and its complete session history.
+   - **Export Data as CSV...**: Saves a comprehensive spreadsheet containing every task (with `is_archived` status) and its complete session history.
    - **Export Data as JSON...**: Saves the complete application database in JSON format.
 3. Select your destination folder and file name, then click **Save**.
 

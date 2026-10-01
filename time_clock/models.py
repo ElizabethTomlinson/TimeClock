@@ -58,6 +58,7 @@ class Task:
     name: str
     created_at: str
     last_reported_at: Optional[str] = None
+    is_archived: bool = False
     entries: List[TimeEntry] = field(default_factory=list)
 
     @property
@@ -89,6 +90,7 @@ class Task:
             "name": self.name,
             "created_at": self.created_at,
             "last_reported_at": self.last_reported_at,
+            "is_archived": self.is_archived,
             "entries": [entry.to_dict() for entry in self.entries],
         }
 
@@ -101,6 +103,7 @@ class Task:
             name=data.get("name", ""),
             created_at=data.get("created_at", ""),
             last_reported_at=data.get("last_reported_at"),
+            is_archived=bool(data.get("is_archived", False)),
             entries=entries,
         )
 

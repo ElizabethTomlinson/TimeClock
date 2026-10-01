@@ -63,16 +63,19 @@ class TestExport(unittest.TestCase):
         self.assertEqual(reader[0]["task_id"], "t1")
         self.assertEqual(reader[0]["task_name"], "Feature: Export Data, Reporting")
         self.assertEqual(reader[0]["last_reported_at"], "2026-09-30T11:00:00")
+        self.assertEqual(reader[0]["is_archived"], "false")
         self.assertEqual(reader[0]["entry_id"], "e1")
         self.assertEqual(float(reader[0]["duration_seconds"]), 3600.0)
 
         self.assertEqual(reader[1]["task_id"], "t1")
         self.assertEqual(reader[1]["last_reported_at"], "2026-09-30T11:00:00")
+        self.assertEqual(reader[1]["is_archived"], "false")
         self.assertEqual(reader[1]["entry_id"], "e2")
         self.assertEqual(float(reader[1]["duration_seconds"]), 1800.0)
 
         self.assertEqual(reader[2]["task_id"], "t2")
         self.assertEqual(reader[2]["last_reported_at"], "")
+        self.assertEqual(reader[2]["is_archived"], "false")
         self.assertEqual(reader[2]["entry_id"], "")
         self.assertEqual(float(reader[2]["duration_seconds"]), 0.0)
 
@@ -99,6 +102,38 @@ class TestExport(unittest.TestCase):
         with open(target_path, "r", encoding="utf-8") as f:
             header_line = f.readline().strip()
         self.assertEqual(header_line, ",".join(CSV_FIELDNAMES))
+
+    def test_export_includes_is_archived_flag(self):
+        archived_state = AppState(
+            tasks={
+                "t_arch": Task(
+                    id="t_arch",
+                    name="Archived Milestone",
+                    created_at="2026-08-01T10:00:00",
+                    is_archived=True,
+                    entries=[
+                        TimeEntry(
+                            id="e_arch_1",
+                            start_time="2026-08-01T10:00:00",
+                            end_time="2026-08-01T11:00:00",
+                            duration_seconds=3600.0,
+                        )
+                    ],
+                )
+            }
+        )
+        csv_path = self.test_dir / "archived.csv"
+        export_to_csv(archived_state, csv_path)
+        with open(csv_path, "r", encoding="utf-8") as f:
+            reader = list(csv.DictReader(f))
+        self.assertEqual(len(reader), 1)
+        self.assertEqual(reader[0]["is_archived"], "true")
+
+        json_path = self.test_dir / "archived.json"
+        export_to_json(archived_state, json_path)
+        with open(json_path, "r", encoding="utf-8") as f:
+            data = json.load(f)
+        self.assertTrue(data["tasks"]["t_arch"]["is_archived"])
 
     def test_export_to_json_full(self):
         target_path = self.test_dir / "exports" / "all_data.json"
