@@ -1,0 +1,259 @@
+"""Task management UI panel."""
+from __future__ import annotations
+
+import tkinter as tk
+from tkinter import messagebox, simpledialog, ttk
+from typing import Optional
+
+from time_clock.engine import TimeClockEngine
+from time_clock.events import Event, EventType
+from time_clock.models import Task, format_duration, iso_now, parse_iso
+
+
+class TaskPanel(ttk.LabelFrame):
+    """Panel for creating, listing, selecting, and managing tasks."""
+
+    def __init__(self, parent: tk.Widget, engine: TimeClockEngine) -> None:
+        super().__init__(parent, text="Tasks", padding=10)
+        self.engine = engine
+        self._updating_selection = False
+
+        self._build_ui()
+        self._register_events()
+        self.refresh_task_list()
+
+    def _build_ui(self) -> None:
+        # Task Creation Section
+        add_frame = ttk.Frame(self)
+        add_frame.pack(fill=tk.X, pady=(0, 10))
+
+        self.new_task_var = tk.StringVar()
+        self.new_task_entry = ttk.Entry(add_frame, textvariable=self.new_task_var)
+        self.new_task_entry.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=(0, 5))
+        self.new_task_entry.bind("<Return>", lambda event: self._on_add_task())
+
+        add_btn = ttk.Button(add_frame, text="Add Task", command=self._on_add_task)
+        add_btn.pack(side=tk.RIGHT)
+
+        # Task List / Treeview Section
+        list_frame = ttk.Frame(self)
+        list_frame.pack(fill=tk.BOTH, expand=True)
+
+        columns = ("name", "total_time", "unreported_time")
+        self.tree = ttk.Treeview(
+            list_frame,
+            columns=columns,
+            show="headings",
+            selectmode="browse",
+            height=8
+        )
+        self.tree.heading("name", text="Task Name")
+        self.tree.heading("total_time", text="Total Time")
+        self.tree.heading("unreported_time", text="Unreported")
+        self.tree.column("name", width=120, anchor=tk.W)
+        self.tree.column("total_time", width=80, anchor=tk.E)
+        self.tree.column("unreported_time", width=80, anchor=tk.E)
+
+        scrollbar = ttk.Scrollbar(list_frame, orient=tk.VERTICAL, command=self.tree.yview)
+        self.tree.configure(yscrollcommand=scrollbar.set)
+
+        self.tree.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+        scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
+
+        self.tree.bind("<<TreeviewSelect>>", self._on_tree_select)
+
+        # Management Buttons Section
+        btn_frame = ttk.Frame(self)
+        btn_frame.pack(fill=tk.X, pady=(10, 0))
+
+        rename_btn = ttk.Button(btn_frame, text="Rename", command=self._on_rename_task)
+        rename_btn.pack(side=tk.LEFT, padx=(0, 4), expand=True, fill=tk.X)
+
+        self.report_btn = ttk.Button(btn_frame, text="Report...", command=self._on_mark_reported_menu)
+        self.report_btn.pack(side=tk.LEFT, padx=(0, 4), expand=True, fill=tk.X)
+
+        delete_btn = ttk.Button(btn_frame, text="Delete", command=self._on_delete_task)
+        delete_btn.pack(side=tk.RIGHT, expand=True, fill=tk.X)
+
+    def _register_events(self) -> None:
+        self.engine.event_bus.subscribe(EventType.TASK_CREATED, self._on_task_created_event)
+        self.engine.event_bus.subscribe(EventType.TASK_DELETED, self._on_task_deleted_event)
+        self.engine.event_bus.subscribe(EventType.TASK_RENAMED, self._on_task_renamed_event)
+        self.engine.event_bus.subscribe(EventType.TASK_SELECTED, self._on_task_selected_event)
+        self.engine.event_bus.subscribe(EventType.TASK_REPORTED, self._on_task_reported_event)
+        self.engine.event_bus.subscribe(EventType.CLOCK_OUT, self._on_clock_out_event)
+        self.engine.event_bus.subscribe(EventType.STATE_LOADED, self._on_state_loaded_event)
+
+    def _on_add_task(self) -> None:
+        name = self.new_task_var.get().strip()
+        if not name:
+            return
+        try:
+            self.engine.create_task(name)
+            self.new_task_var.set("")
+        except ValueError as e:
+            messagebox.showerror("Error", str(e))
+
+    def _on_tree_select(self, event: tk.Event) -> None:
+        if self._updating_selection:
+            return
+        selection = self.tree.selection()
+        if not selection:
+            return
+        task_id = selection[0]
+        if self.engine.state.active_task_id != task_id:
+            try:
+                self.engine.select_task(task_id)
+            except Exception as e:
+                messagebox.showerror("Error", str(e))
+
+    def _on_rename_task(self) -> None:
+        selection = self.tree.selection()
+        if not selection:
+            messagebox.showinfo("Select Task", "Please select a task to rename.")
+            return
+        task_id = selection[0]
+        task = self.engine.get_task(task_id)
+        if not task:
+            return
+        new_name = simpledialog.askstring("Rename Task", "Enter new task name:", initialvalue=task.name)
+        if new_name and new_name.strip():
+            try:
+                self.engine.rename_task(task_id, new_name.strip())
+            except Exception as e:
+                messagebox.showerror("Error", str(e))
+
+    def _on_mark_reported_menu(self) -> None:
+        selection = self.tree.selection()
+        if not selection:
+            messagebox.showinfo("Select Task", "Please select a task first.")
+            return
+        task_id = selection[0]
+        task = self.engine.get_task(task_id)
+        if not task:
+            return
+
+        menu = tk.Menu(self, tearoff=0)
+        menu.add_command(label="Mark as Reported Now", command=lambda: self._mark_reported_now(task_id))
+        menu.add_command(label="Custom Timestamp...", command=lambda: self._mark_reported_custom(task_id))
+        menu.add_command(label="Clear Reported Status", command=lambda: self._clear_reported_status(task_id))
+
+        try:
+            x = self.report_btn.winfo_rootx()
+            y = self.report_btn.winfo_rooty() + self.report_btn.winfo_height()
+            menu.tk_popup(x, y)
+        finally:
+            menu.grab_release()
+
+    def _mark_reported_now(self, task_id: str) -> None:
+        try:
+            self.engine.mark_task_reported(task_id)
+        except Exception as e:
+            messagebox.showerror("Error", str(e))
+
+    def _mark_reported_custom(self, task_id: str) -> None:
+        task = self.engine.get_task(task_id)
+        if not task:
+            return
+        initial = task.last_reported_at or iso_now()
+        ts = simpledialog.askstring(
+            "Reported Cutoff Timestamp",
+            "Enter ISO-8601 timestamp (e.g. 2026-10-01T09:00:00):",
+            initialvalue=initial,
+        )
+        if ts and ts.strip():
+            clean_ts = ts.strip()
+            try:
+                parse_iso(clean_ts)
+            except Exception:
+                messagebox.showerror(
+                    "Invalid Timestamp",
+                    f"'{clean_ts}' is not a valid ISO timestamp format.\nExample: 2026-10-01T09:00:00",
+                )
+                return
+            try:
+                self.engine.mark_task_reported(task_id, clean_ts)
+            except Exception as e:
+                messagebox.showerror("Error", str(e))
+
+    def _clear_reported_status(self, task_id: str) -> None:
+        try:
+            self.engine.clear_task_reported(task_id)
+        except Exception as e:
+            messagebox.showerror("Error", str(e))
+
+    def _on_delete_task(self) -> None:
+        selection = self.tree.selection()
+        if not selection:
+            messagebox.showinfo("Select Task", "Please select a task to delete.")
+            return
+        task_id = selection[0]
+        task = self.engine.get_task(task_id)
+        if not task:
+            return
+        confirm = messagebox.askyesno(
+            "Confirm Delete",
+            f"Are you sure you want to delete task '{task.name}' and all its logged sessions?",
+        )
+        if confirm:
+            try:
+                self.engine.delete_task(task_id)
+            except Exception as e:
+                messagebox.showerror("Error", str(e))
+
+    def refresh_task_list(self) -> None:
+        """Reload all tasks in the treeview and select the active task."""
+        self._updating_selection = True
+        try:
+            # Clear existing items
+            for item in self.tree.get_children():
+                self.tree.delete(item)
+
+            tasks = self.engine.get_tasks()
+            for task in tasks:
+                total_str = format_duration(task.total_duration_seconds)
+                unrep_str = format_duration(task.calculate_unreported_duration())
+                self.tree.insert("", tk.END, iid=task.id, values=(task.name, total_str, unrep_str))
+
+            active_id = self.engine.state.active_task_id
+            if active_id and self.tree.exists(active_id):
+                self.tree.selection_set(active_id)
+                self.tree.focus(active_id)
+        finally:
+            self._updating_selection = False
+
+    def update_task_duration(self, task_id: str, duration_seconds: float) -> None:
+        """Update the displayed total and unreported time for a specific task row."""
+        if self.tree.exists(task_id):
+            task = self.engine.get_task(task_id)
+            if task:
+                self.tree.set(task_id, "total_time", format_duration(duration_seconds))
+                self.tree.set(task_id, "unreported_time", format_duration(task.calculate_unreported_duration()))
+
+    def _on_task_created_event(self, event: Event) -> None:
+        self.refresh_task_list()
+
+    def _on_task_deleted_event(self, event: Event) -> None:
+        self.refresh_task_list()
+
+    def _on_task_renamed_event(self, event: Event) -> None:
+        self.refresh_task_list()
+
+    def _on_task_selected_event(self, event: Event) -> None:
+        task = event.data
+        if task and self.tree.exists(task.id):
+            self._updating_selection = True
+            try:
+                self.tree.selection_set(task.id)
+                self.tree.focus(task.id)
+            finally:
+                self._updating_selection = False
+
+    def _on_task_reported_event(self, event: Event) -> None:
+        self.refresh_task_list()
+
+    def _on_clock_out_event(self, event: Event) -> None:
+        self.refresh_task_list()
+
+    def _on_state_loaded_event(self, event: Event) -> None:
+        self.refresh_task_list()
