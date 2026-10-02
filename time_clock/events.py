@@ -19,6 +19,7 @@ class EventType(str, Enum):
     CLOCK_IN = "CLOCK_IN"
     CLOCK_OUT = "CLOCK_OUT"
     TICK = "TICK"
+    ENTRY_UPDATED = "ENTRY_UPDATED"
     STATE_LOADED = "STATE_LOADED"
     STATE_SAVED = "STATE_SAVED"
 

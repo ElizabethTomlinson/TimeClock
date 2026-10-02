@@ -120,6 +120,7 @@ class HistoryPanel(ttk.LabelFrame):
         self.engine.event_bus.subscribe(EventType.TASK_DELETED, self._on_task_deleted_event)
         self.engine.event_bus.subscribe(EventType.TASK_RENAMED, self._on_task_renamed_event)
         self.engine.event_bus.subscribe(EventType.TASK_REPORTED, self._on_task_reported_event)
+        self.engine.event_bus.subscribe(EventType.ENTRY_UPDATED, self._on_entry_updated_event)
         self.engine.event_bus.subscribe(EventType.STATE_LOADED, self._on_state_loaded_event)
 
     def refresh_history(self) -> None:
@@ -179,6 +180,9 @@ class HistoryPanel(ttk.LabelFrame):
         self.refresh_history()
 
     def _on_task_reported_event(self, event: Event) -> None:
+        self.refresh_history()
+
+    def _on_entry_updated_event(self, event: Event) -> None:
         self.refresh_history()
 
     def _on_state_loaded_event(self, event: Event) -> None:

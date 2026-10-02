@@ -9,11 +9,12 @@
 2. [Interface Overview](#interface-overview)
 3. [Managing Tasks](#managing-tasks)
 4. [Tracking Time](#tracking-time)
-5. [Managing Reported vs. Unreported Time](#managing-reported-vs-unreported-time)
-6. [Viewing Session History](#viewing-session-history)
-7. [Exporting Your Data](#exporting-your-data)
-8. [Tips for Effective Time Tracking](#tips-for-effective-time-tracking)
-9. [Frequently Asked Questions](#frequently-asked-questions)
+5. [Editing Clock In/Out Times (Advanced)](#editing-clock-in-out-times-advanced)
+6. [Managing Reported vs. Unreported Time](#managing-reported-vs-unreported-time)
+7. [Viewing Session History](#viewing-session-history)
+8. [Exporting Your Data](#exporting-your-data)
+9. [Tips for Effective Time Tracking](#tips-for-effective-time-tracking)
+10. [Frequently Asked Questions](#frequently-asked-questions)
 
 ---
 
@@ -33,21 +34,24 @@ The application window will open immediately. All your tasks, tracked sessions, 
 The Time Clock window is organized into three intuitive areas:
 
 ```
-+------------------------------------+------------------------------------+
-|  Tasks Panel (Left)                |  Clock Tracker (Top Right)         |
-|  - Add new tasks                   |  - Active task status & timer      |
-|  - Select, rename, archive, delete |  - All Tasks Summary: Day/Week/Mo  |
-|  - Show/hide archived tasks        |  - Clock In / Clock Out button     |
-|  - View total & unreported times   |  - Mark Reported button            |
-|                                    +------------------------------------+
-|                                    |  Session History (Bottom Right)    |
-|                                    |  - Detailed session timestamps     |
-|                                    |  - Reported vs unreported status   |
-|                                    |  - Task history export & summary   |
-+------------------------------------+------------------------------------+
++------------------------------------------------------------------------+
+|  Top Menu: File | Advanced (Edit Task Clock In/Out...)                 |
++------------------------------------+-----------------------------------+
+|  Tasks Panel (Left)                |  Clock Tracker (Top Right)        |
+|  - Add new tasks                   |  - Active task status & timer     |
+|  - Select, rename, archive, delete |  - All Tasks Summary: Day/Week/Mo |
+|  - Show/hide archived tasks        |  - Clock In / Clock Out button    |
+|  - View total & unreported times   |  - Mark Reported button           |
+|                                    +-----------------------------------+
+|                                    |  Session History (Bottom Right)   |
+|                                    |  - Detailed session timestamps    |
+|                                    |  - Reported vs unreported status  |
+|                                    |  - Task history export & summary  |
++------------------------------------+-----------------------------------+
 ```
 
 - **File Menu (Top Bar)**: Access global data export (CSV/JSON) and application exit.
+- **Advanced Menu (Top Bar)**: Access the **Edit Task Clock In/Out...** dialog to adjust active or historical timestamps.
 - **Tasks Panel (Left Side)**: Manage your list of projects or tasks and switch between them.
 - **Clock Tracker (Top Right)**: Control your live timer and see current session progress.
 - **Session History (Bottom Right)**: Review logged work sessions for the selected task.
@@ -133,6 +137,45 @@ Directly below the active task counters in the **Clock Tracker**, the **All Task
 
 ### Safe Auto-Save on Exit
 If you close the application window while a timer is running, Time Clock automatically clocks you out and safely records the active session before closing.
+
+---
+
+## Editing Clock In/Out Times (Advanced)
+
+If you forget to clock in on time, forget to clock out, or need to correct past timestamps, Time Clock provides a dedicated **Advanced** menu option.
+
+### Opening the Edit Dialog
+1. In the top application menu bar, click **Advanced**.
+2. Select **Edit Task Clock In/Out...**.
+3. A modal dialog will appear centered over the application window.
+
+### Selecting a Task
+- Use the **Select Task** dropdown at the top to choose the task you wish to inspect or edit. It defaults to your currently selected task and includes any archived tasks.
+
+### Adjusting an Active Session Start Time
+If the selected task is currently clocked in:
+1. The **Active Running Session** section will display your active clock-in timestamp.
+2. Edit the **Start Time** field (e.g. adjust `2026-10-01 09:30:00` to `2026-10-01 09:00:00`).
+3. Click **Apply Start Time**.
+4. The live timer and total duration will update immediately across all panels.
+
+### Editing Completed Session Records
+1. In the **Completed Sessions** table, click on any past session to highlight and populate its timestamps into the edit fields below.
+2. Modify the **Start** and/or **End** timestamp.
+3. Click **Save Changes**.
+4. The duration will automatically recompute, and your task totals and session history will refresh immediately.
+
+### Adding a Missed Session Manually
+1. Enter the desired **Start** and **End** timestamps in the input fields.
+2. Click **Add as New**.
+3. A new completed session entry is added to the task, and duration and period totals are recalculated automatically.
+
+### Supported Timestamp Formats & Validation
+- **Formats**: Supports standard ISO formats with or without the `T` separator (e.g., `2026-10-01 09:00:00` or `2026-10-01T09:00:00`).
+- **Validation**:
+  - Start timestamps cannot be set in the future.
+  - End timestamps cannot be earlier than start timestamps.
+  - Descriptive error messages are displayed if an invalid date or timestamp format is entered.
 
 ---
 

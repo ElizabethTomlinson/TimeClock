@@ -9,6 +9,7 @@ from typing import Optional
 from time_clock.engine import TimeClockEngine
 from time_clock.events import EventBus
 from time_clock.gui.clock_panel import ClockPanel
+from time_clock.gui.edit_session_dialog import EditClockInOutDialog
 from time_clock.gui.history_panel import HistoryPanel
 from time_clock.gui.task_panel import TaskPanel
 from time_clock.storage import Storage
@@ -50,7 +51,7 @@ class TimeClockApp:
             self.style.theme_use("clam")
 
     def _build_menu(self) -> None:
-        """Create the top menu bar with File operations."""
+        """Create the top menu bar with File operations and Advanced tools."""
         menubar = tk.Menu(self.root)
 
         file_menu = tk.Menu(menubar, tearoff=False)
@@ -72,7 +73,20 @@ class TimeClockApp:
         )
 
         menubar.add_cascade(label="File", menu=file_menu, underline=0)
+
+        advanced_menu = tk.Menu(menubar, tearoff=False)
+        advanced_menu.add_command(
+            label="Edit Task Clock In/Out...",
+            command=self._open_edit_clock_in_out,
+            underline=0,
+        )
+        menubar.add_cascade(label="Advanced", menu=advanced_menu, underline=0)
+
         self.root.config(menu=menubar)
+
+    def _open_edit_clock_in_out(self) -> None:
+        """Open the modal dialog for editing clock in/out times and sessions."""
+        EditClockInOutDialog(parent=self.root, engine=self.engine)
 
     def _export_as_csv(self) -> None:
         """Prompt user for file location and export full tracking data as CSV."""

@@ -10,10 +10,11 @@ This document contains project-specific information, setup instructions, testing
 
 - **`time_clock/models.py`**: Domain dataclasses (`TimeEntry`, `Task`, `AppState`) with explicit dictionary serialization/deserialization methods (`to_dict` / `from_dict`) and duration/ISO-8601 formatting utilities (`format_duration`, `iso_now`, `parse_iso`).
 - **`time_clock/storage.py`**: `SQLiteStorage` (and base `Storage`) persisting domain state to SQLite database (default: `data/time_clock.db`) with automatic table creation and legacy JSON migration handling.
-- **`time_clock/events.py`**: In-process synchronous publish-subscribe `EventBus` using the `EventType` enum for decoupling the business logic from GUI components.
-- **`time_clock/engine.py`**: `TimeClockEngine` coordinator implementing business rules (clocking in/out, task CRUD, duration calculations, active timer tracking) and emitting lifecycle events.
+- **`time_clock/events.py`**: In-process synchronous publish-subscribe `EventBus` using the `EventType` enum (`TASK_*`, `CLOCK_IN`, `CLOCK_OUT`, `TICK`, `ENTRY_UPDATED`, `STATE_LOADED`, `STATE_SAVED`) for decoupling the business logic from GUI components.
+- **`time_clock/engine.py`**: `TimeClockEngine` coordinator implementing business rules (clocking in/out, task CRUD, updating active/completed session timestamps, duration calculations, active timer tracking) and emitting lifecycle events.
 - **`time_clock/gui/`**: Tkinter/ttk desktop interface divided into modular panels:
-  - `app.py`: `TimeClockApp` main window and container.
+  - `app.py`: `TimeClockApp` main window and container with `File` and `Advanced` menu bars.
+  - `edit_session_dialog.py`: `EditClockInOutDialog` modal for editing active session start times and modifying/adding historical sessions.
   - `task_panel.py`: `TaskPanel` for task selection and management.
   - `clock_panel.py`: `ClockPanel` for timer display and clock in/out controls.
   - `history_panel.py`: `HistoryPanel` for session logs and statistics.

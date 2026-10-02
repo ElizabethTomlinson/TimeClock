@@ -10,6 +10,7 @@ from unittest.mock import patch
 from time_clock.engine import TimeClockEngine
 from time_clock.events import EventBus
 from time_clock.gui.app import TimeClockApp
+from time_clock.gui.edit_session_dialog import EditClockInOutDialog
 from time_clock.models import TimeEntry
 from time_clock.storage import SQLiteStorage
 
@@ -442,6 +443,120 @@ class TestGUI(unittest.TestCase):
         self.assertIn("Day:", app.clock_panel.day_time_var.get())
         self.assertIn("Week:", app.clock_panel.week_time_var.get())
         self.assertIn("Month:", app.clock_panel.month_time_var.get())
+
+    def test_advanced_menu_exists(self):
+        app = TimeClockApp(root=self.root, engine=self.engine)
+        menubar = self.root.nametowidget(self.root.cget("menu"))
+        self.assertIsNotNone(menubar)
+
+        # Check for Advanced cascade
+        found_advanced = False
+        num_items = menubar.index("end") + 1
+        for i in range(num_items):
+            try:
+                label = menubar.entrycget(i, "label")
+                if label == "Advanced":
+                    found_advanced = True
+                    break
+            except Exception:
+                pass
+        self.assertTrue(found_advanced, "Advanced menu should exist on top menubar")
+
+    @patch("time_clock.gui.edit_session_dialog.messagebox.showinfo")
+    def test_edit_clock_in_out_dialog_active_session(self, mock_info):
+        app = TimeClockApp(root=self.root, engine=self.engine)
+        t = self.engine.create_task("Active Session Task")
+        self.engine.select_task(t.id)
+        self.engine.clock_in()
+        self.root.update_idletasks()
+
+        dialog = EditClockInOutDialog(parent=self.root, engine=self.engine)
+        self.root.update_idletasks()
+
+        self.assertIn("actively clocked in", dialog.active_status_lbl.cget("text"))
+        self.assertEqual(str(dialog.active_apply_btn.cget("state")), "normal")
+
+        # Change active start time
+        dialog.active_start_var.set("2026-10-01 07:00:00")
+        dialog._on_apply_active_start()
+        self.root.update_idletasks()
+
+        self.assertEqual(self.engine.state.current_session_start, "2026-10-01T07:00:00")
+        mock_info.assert_called_once()
+        dialog.destroy()
+
+    @patch("time_clock.gui.edit_session_dialog.messagebox.showinfo")
+    def test_edit_clock_in_out_dialog_past_entries(self, mock_info):
+        app = TimeClockApp(root=self.root, engine=self.engine)
+        t = self.engine.create_task("Past Entries Task")
+        entry = self.engine.add_manual_time_entry(
+            t.id, "2026-10-01T09:00:00", "2026-10-01T10:00:00"
+        )
+        self.root.update_idletasks()
+
+        dialog = EditClockInOutDialog(parent=self.root, engine=self.engine)
+        self.root.update_idletasks()
+
+        children = dialog.tree.get_children()
+        self.assertEqual(len(children), 1)
+        self.assertEqual(children[0], entry.id)
+
+        # Select entry
+        dialog.tree.selection_set(entry.id)
+        dialog._on_tree_select()
+
+        self.assertEqual(dialog.entry_start_var.get(), "2026-10-01 09:00:00")
+        self.assertEqual(dialog.entry_end_var.get(), "2026-10-01 10:00:00")
+
+        # Edit and save
+        dialog.entry_start_var.set("2026-10-01 08:00:00")
+        dialog._on_save_entry()
+        self.root.update_idletasks()
+
+        self.assertEqual(t.entries[0].duration_seconds, 7200.0)
+        self.assertIn("02:00:00", app.history_panel.summary_var.get())
+        dialog.destroy()
+
+    @patch("time_clock.gui.edit_session_dialog.messagebox.showinfo")
+    def test_edit_clock_in_out_dialog_add_manual_entry(self, mock_info):
+        app = TimeClockApp(root=self.root, engine=self.engine)
+        t = self.engine.create_task("Manual Insert Task")
+        self.root.update_idletasks()
+
+        dialog = EditClockInOutDialog(parent=self.root, engine=self.engine)
+        dialog.entry_start_var.set("2026-10-01 13:00:00")
+        dialog.entry_end_var.set("2026-10-01 14:15:00")
+        dialog._on_add_manual_entry()
+        self.root.update_idletasks()
+
+        self.assertEqual(len(t.entries), 1)
+        self.assertEqual(t.entries[0].duration_seconds, 4500.0)
+        self.assertIn("01:15:00", app.history_panel.summary_var.get())
+        dialog.destroy()
+
+    @patch("time_clock.gui.edit_session_dialog.messagebox.showerror")
+    def test_edit_clock_in_out_dialog_validation_errors(self, mock_error):
+        app = TimeClockApp(root=self.root, engine=self.engine)
+        t = self.engine.create_task("Validation Error Task")
+        entry = self.engine.add_manual_time_entry(
+            t.id, "2026-10-01T09:00:00", "2026-10-01T10:00:00"
+        )
+        dialog = EditClockInOutDialog(parent=self.root, engine=self.engine)
+
+        # Invalid format
+        dialog.tree.selection_set(entry.id)
+        dialog._on_tree_select()
+        dialog.entry_start_var.set("not-a-date")
+        dialog._on_save_entry()
+        mock_error.assert_called()
+
+        # End time earlier than start time
+        mock_error.reset_mock()
+        dialog.entry_start_var.set("2026-10-01 12:00:00")
+        dialog.entry_end_var.set("2026-10-01 11:00:00")
+        dialog._on_save_entry()
+        mock_error.assert_called()
+        dialog.destroy()
 
 
 if __name__ == "__main__":

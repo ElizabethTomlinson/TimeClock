@@ -360,6 +360,86 @@ class TimeClockEngine:
         except Exception:
             return 0.0
 
+    def update_current_session_start(self, new_start_time: str) -> None:
+        """Update the start timestamp of the currently running session."""
+        if not self.state.is_running or not self.state.current_session_start:
+            raise ValueError("Cannot update session start time: timer is not running.")
+        parsed_dt = parse_iso(new_start_time.replace(" ", "T"))
+        if parsed_dt > datetime.now():
+            raise ValueError("Session start time cannot be in the future.")
+        self.state.current_session_start = parsed_dt.isoformat()
+        self._save_state()
+        self.event_bus.emit(
+            EventType.ENTRY_UPDATED,
+            {
+                "type": "active_session",
+                "start_time": self.state.current_session_start,
+                "task": self.get_active_task(),
+            },
+        )
+
+    def update_time_entry(
+        self,
+        task_id: str,
+        entry_id: str,
+        start_time: str,
+        end_time: Optional[str] = None,
+    ) -> TimeEntry:
+        """Update an existing completed time entry's start/end timestamps and recalculate duration."""
+        if task_id not in self.state.tasks:
+            raise KeyError(f"Task with id '{task_id}' not found.")
+        task = self.state.tasks[task_id]
+        entry = next((e for e in task.entries if e.id == entry_id), None)
+        if not entry:
+            raise KeyError(f"TimeEntry with id '{entry_id}' not found in task '{task_id}'.")
+
+        start_dt = parse_iso(start_time.replace(" ", "T"))
+        iso_start = start_dt.isoformat()
+        iso_end = None
+        duration = 0.0
+
+        if end_time:
+            end_dt = parse_iso(end_time.replace(" ", "T"))
+            if end_dt < start_dt:
+                raise ValueError("End time cannot be earlier than start time.")
+            iso_end = end_dt.isoformat()
+            duration = max(0.0, (end_dt - start_dt).total_seconds())
+
+        entry.start_time = iso_start
+        entry.end_time = iso_end
+        entry.duration_seconds = duration
+
+        self._save_state()
+        self.event_bus.emit(
+            EventType.ENTRY_UPDATED,
+            {"task_id": task_id, "entry": entry, "task": task},
+        )
+        return entry
+
+    def add_manual_time_entry(
+        self, task_id: str, start_time: str, end_time: str
+    ) -> TimeEntry:
+        """Manually create and insert a completed time entry for a task."""
+        if task_id not in self.state.tasks:
+            raise KeyError(f"Task with id '{task_id}' not found.")
+        start_dt = parse_iso(start_time.replace(" ", "T"))
+        end_dt = parse_iso(end_time.replace(" ", "T"))
+        if end_dt < start_dt:
+            raise ValueError("End time cannot be earlier than start time.")
+        entry = TimeEntry(
+            id=f"entry_{uuid.uuid4().hex[:8]}",
+            start_time=start_dt.isoformat(),
+            end_time=end_dt.isoformat(),
+            duration_seconds=max(0.0, (end_dt - start_dt).total_seconds()),
+        )
+        self.state.tasks[task_id].entries.append(entry)
+        self._save_state()
+        self.event_bus.emit(
+            EventType.ENTRY_UPDATED,
+            {"task_id": task_id, "entry": entry, "task": self.state.tasks[task_id]},
+        )
+        return entry
+
     def tick(self) -> Dict[str, Any]:
         """Periodic tick handler calculating live duration and dispatching TICK event."""
         session_duration = self.get_current_session_duration()

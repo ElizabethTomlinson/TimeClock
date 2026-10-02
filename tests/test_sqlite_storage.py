@@ -373,6 +373,46 @@ class TestSQLiteStorage(unittest.TestCase):
         self.assertTrue(reloaded.tasks["t_old2"].is_archived)
         storage.close()
 
+    def test_save_and_reload_updated_time_entries(self):
+        task = Task(
+            id="t1",
+            name="Task with Entries",
+            created_at="2026-10-01T08:00:00",
+            entries=[
+                TimeEntry(
+                    id="e1",
+                    start_time="2026-10-01T09:00:00",
+                    end_time="2026-10-01T10:00:00",
+                    duration_seconds=3600.0,
+                )
+            ],
+        )
+        state = AppState(tasks={"t1": task}, active_task_id="t1")
+        self.storage.save(state)
+
+        # Modify entry
+        loaded = self.storage.load()
+        loaded.tasks["t1"].entries[0].start_time = "2026-10-01T08:30:00"
+        loaded.tasks["t1"].entries[0].duration_seconds = 5400.0
+        # Add another entry
+        loaded.tasks["t1"].entries.append(
+            TimeEntry(
+                id="e2",
+                start_time="2026-10-01T14:00:00",
+                end_time="2026-10-01T15:00:00",
+                duration_seconds=3600.0,
+            )
+        )
+        self.storage.save(loaded)
+
+        reloaded = self.storage.load()
+        self.assertEqual(len(reloaded.tasks["t1"].entries), 2)
+        self.assertEqual(reloaded.tasks["t1"].entries[0].start_time, "2026-10-01T08:30:00")
+        self.assertEqual(reloaded.tasks["t1"].entries[0].duration_seconds, 5400.0)
+        self.assertEqual(reloaded.tasks["t1"].entries[1].id, "e2")
+        self.assertEqual(reloaded.tasks["t1"].entries[1].duration_seconds, 3600.0)
+        self.assertEqual(reloaded.tasks["t1"].total_duration_seconds, 9000.0)
+
 
 if __name__ == "__main__":
     unittest.main()

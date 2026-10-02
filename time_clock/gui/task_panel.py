@@ -113,6 +113,7 @@ class TaskPanel(ttk.LabelFrame):
         self.engine.event_bus.subscribe(EventType.TASK_REPORTED, self._on_task_reported_event)
         self.engine.event_bus.subscribe(EventType.CLOCK_IN, self._on_clock_in_event)
         self.engine.event_bus.subscribe(EventType.CLOCK_OUT, self._on_clock_out_event)
+        self.engine.event_bus.subscribe(EventType.ENTRY_UPDATED, self._on_entry_updated_event)
         self.engine.event_bus.subscribe(EventType.TICK, self._on_tick_event)
         self.engine.event_bus.subscribe(EventType.STATE_LOADED, self._on_state_loaded_event)
 
@@ -371,6 +372,9 @@ class TaskPanel(ttk.LabelFrame):
             self._update_summary()
 
     def _on_clock_out_event(self, event: Event) -> None:
+        self.refresh_task_list()
+
+    def _on_entry_updated_event(self, event: Event) -> None:
         self.refresh_task_list()
 
     def _on_tick_event(self, event: Event) -> None:

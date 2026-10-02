@@ -468,6 +468,91 @@ class TestTimeClockEngine(unittest.TestCase):
         self.assertEqual(len(tick_events), 1)
         self.assertEqual(tick_events[0].data["day_duration_formatted"], payload["day_duration_formatted"])
 
+    def test_update_current_session_start_success(self):
+        task = self.engine.create_task("Session Start Task")
+        self.engine.select_task(task.id)
+        self.engine.clock_in()
+
+        events = []
+        self.bus.subscribe(EventType.ENTRY_UPDATED, lambda e: events.append(e))
+
+        past_time = "2026-10-01T08:00:00"
+        self.engine.update_current_session_start(past_time)
+
+        self.assertEqual(self.engine.state.current_session_start, past_time)
+        self.assertEqual(len(events), 1)
+        self.assertEqual(events[0].data["type"], "active_session")
+        self.assertEqual(events[0].data["start_time"], past_time)
+
+        # Verify persisted
+        reloaded = self.storage.load()
+        self.assertEqual(reloaded.current_session_start, past_time)
+
+    def test_update_current_session_start_not_running_fails(self):
+        task = self.engine.create_task("Not Running Task")
+        with self.assertRaises(ValueError):
+            self.engine.update_current_session_start("2026-10-01T08:00:00")
+
+    def test_update_current_session_start_future_time_fails(self):
+        task = self.engine.create_task("Future Time Task")
+        self.engine.select_task(task.id)
+        self.engine.clock_in()
+
+        future_time = "2099-01-01T00:00:00"
+        with self.assertRaises(ValueError):
+            self.engine.update_current_session_start(future_time)
+
+    def test_update_time_entry_success_recalculates_duration(self):
+        task = self.engine.create_task("Update Entry Task")
+        self.engine.select_task(task.id)
+        entry = self.engine.add_manual_time_entry(
+            task.id, "2026-10-01T09:00:00", "2026-10-01T10:00:00"
+        )
+        self.assertEqual(entry.duration_seconds, 3600.0)
+
+        events = []
+        self.bus.subscribe(EventType.ENTRY_UPDATED, lambda e: events.append(e))
+
+        updated = self.engine.update_time_entry(
+            task.id, entry.id, "2026-10-01T08:30:00", "2026-10-01T10:00:00"
+        )
+        self.assertEqual(updated.duration_seconds, 5400.0)
+        self.assertEqual(task.total_duration_seconds, 5400.0)
+        self.assertEqual(len(events), 1)
+
+        # Verify persisted
+        reloaded = self.storage.load()
+        reloaded_entry = reloaded.tasks[task.id].entries[0]
+        self.assertEqual(reloaded_entry.duration_seconds, 5400.0)
+
+    def test_update_time_entry_invalid_order_fails(self):
+        task = self.engine.create_task("Invalid Order Task")
+        entry = self.engine.add_manual_time_entry(
+            task.id, "2026-10-01T09:00:00", "2026-10-01T10:00:00"
+        )
+        with self.assertRaises(ValueError):
+            self.engine.update_time_entry(
+                task.id, entry.id, "2026-10-01T11:00:00", "2026-10-01T10:00:00"
+            )
+
+    def test_add_manual_time_entry_success(self):
+        task = self.engine.create_task("Manual Entry Task")
+        events = []
+        self.bus.subscribe(EventType.ENTRY_UPDATED, lambda e: events.append(e))
+
+        entry = self.engine.add_manual_time_entry(
+            task.id, "2026-10-01T14:00:00", "2026-10-01T15:30:00"
+        )
+        self.assertEqual(entry.duration_seconds, 5400.0)
+        self.assertEqual(len(task.entries), 1)
+        self.assertEqual(task.entries[0].id, entry.id)
+        self.assertEqual(len(events), 1)
+
+        # Verify persistence
+        reloaded = self.storage.load()
+        self.assertEqual(len(reloaded.tasks[task.id].entries), 1)
+        self.assertEqual(reloaded.tasks[task.id].entries[0].duration_seconds, 5400.0)
+
 
 if __name__ == "__main__":
     unittest.main()
