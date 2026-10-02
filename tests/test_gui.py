@@ -393,6 +393,56 @@ class TestGUI(unittest.TestCase):
         self.assertIn("Task B", app.clock_panel.task_title_var.get())
         self.assertIn("Task B", app.history_panel.cget("text"))
 
+    def test_clock_panel_period_counters_display(self):
+        app = TimeClockApp(root=self.root, engine=self.engine)
+        self.root.update_idletasks()
+
+        # Initial state: 00:00:00
+        self.assertEqual(app.clock_panel.day_time_var.get(), "Day: 00:00:00")
+        self.assertEqual(app.clock_panel.week_time_var.get(), "Week: 00:00:00")
+        self.assertEqual(app.clock_panel.month_time_var.get(), "Month: 00:00:00")
+
+        # Create tasks: one active, one archived
+        t1 = self.engine.create_task("Project 1")
+        t2 = self.engine.create_task("Project 2")
+
+        # Add today's entries
+        from datetime import datetime
+        now = datetime.now()
+        start_t1 = now.replace(hour=8, minute=0, second=0, microsecond=0).isoformat()
+        end_t1 = now.replace(hour=9, minute=0, second=0, microsecond=0).isoformat()
+        start_t2 = now.replace(hour=9, minute=0, second=0, microsecond=0).isoformat()
+        end_t2 = now.replace(hour=10, minute=0, second=0, microsecond=0).isoformat()
+
+        t1.entries.append(TimeEntry(id="e1", start_time=start_t1, end_time=end_t1, duration_seconds=3600.0))
+        t2.entries.append(TimeEntry(id="e2", start_time=start_t2, end_time=end_t2, duration_seconds=3600.0))
+        self.engine._save_state()
+
+        # Archive t2
+        self.engine.archive_task(t2.id)
+        self.root.update_idletasks()
+
+        # Both entries should be counted in Day, Week, and Month (2 hours = 02:00:00)
+        self.assertEqual(app.clock_panel.day_time_var.get(), "Day: 02:00:00")
+        self.assertEqual(app.clock_panel.week_time_var.get(), "Week: 02:00:00")
+        self.assertEqual(app.clock_panel.month_time_var.get(), "Month: 02:00:00")
+
+    def test_clock_panel_period_counters_tick_update(self):
+        app = TimeClockApp(root=self.root, engine=self.engine)
+        t = self.engine.create_task("Live Period Task")
+        self.root.update_idletasks()
+
+        self.engine.clock_in()
+        self.root.update_idletasks()
+
+        # Trigger tick
+        self.engine.tick()
+        self.root.update_idletasks()
+
+        self.assertIn("Day:", app.clock_panel.day_time_var.get())
+        self.assertIn("Week:", app.clock_panel.week_time_var.get())
+        self.assertIn("Month:", app.clock_panel.month_time_var.get())
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -3,6 +3,7 @@ import shutil
 import tempfile
 import time
 import unittest
+from datetime import datetime
 from pathlib import Path
 
 from time_clock.engine import TimeClockEngine
@@ -385,6 +386,87 @@ class TestTimeClockEngine(unittest.TestCase):
         self.assertEqual(self.engine.get_unreported_tasks_count(), 1)
         self.assertEqual([t.id for t in self.engine.get_unreported_tasks()], [t_active.id])
         self.assertEqual(self.engine.get_total_unreported_duration(), 3600.0)
+
+    def test_get_period_durations_boundaries(self):
+        # Reference datetime: Wednesday 2026-10-14 15:00:00
+        # Day start: 2026-10-14 00:00:00
+        # Week start: Monday 2026-10-12 00:00:00
+        # Month start: 2026-10-01 00:00:00
+        as_of = datetime(2026, 10, 14, 15, 0, 0)
+
+        t1 = self.engine.create_task("Task 1")
+        # 1. Today: 3600s
+        t1.entries.append(
+            TimeEntry(id="e1", start_time="2026-10-14T10:00:00", end_time="2026-10-14T11:00:00", duration_seconds=3600.0)
+        )
+        # 2. Earlier this week: 3600s
+        t1.entries.append(
+            TimeEntry(id="e2", start_time="2026-10-13T10:00:00", end_time="2026-10-13T11:00:00", duration_seconds=3600.0)
+        )
+        # 3. Earlier this month (prior week): 3600s
+        t1.entries.append(
+            TimeEntry(id="e3", start_time="2026-10-05T10:00:00", end_time="2026-10-05T11:00:00", duration_seconds=3600.0)
+        )
+        # 4. Prior month (September): 3600s
+        t1.entries.append(
+            TimeEntry(id="e4", start_time="2026-09-25T10:00:00", end_time="2026-09-25T11:00:00", duration_seconds=3600.0)
+        )
+        self.engine._save_state()
+
+        durations = self.engine.get_period_durations(as_of=as_of, include_running=False)
+        self.assertEqual(durations["day"], 3600.0)
+        self.assertEqual(durations["week"], 7200.0)
+        self.assertEqual(durations["month"], 10800.0)
+
+    def test_get_period_durations_includes_archived_tasks(self):
+        as_of = datetime(2026, 10, 14, 15, 0, 0)
+        t_active = self.engine.create_task("Active Task")
+        t_archived = self.engine.create_task("Archived Task")
+
+        t_active.entries.append(
+            TimeEntry(id="e1", start_time="2026-10-14T09:00:00", end_time="2026-10-14T10:00:00", duration_seconds=3600.0)
+        )
+        t_archived.entries.append(
+            TimeEntry(id="e2", start_time="2026-10-14T11:00:00", end_time="2026-10-14T12:00:00", duration_seconds=3600.0)
+        )
+        self.engine.archive_task(t_archived.id)
+
+        durations = self.engine.get_period_durations(as_of=as_of, include_running=False)
+        self.assertEqual(durations["day"], 7200.0)
+        self.assertEqual(durations["week"], 7200.0)
+        self.assertEqual(durations["month"], 7200.0)
+
+    def test_get_period_durations_with_running_timer(self):
+        t = self.engine.create_task("Live Task")
+        self.engine.select_task(t.id)
+
+        # Set running state starting 2 hours before as_of
+        self.engine.state.is_running = True
+        self.engine.state.current_session_start = "2026-10-14T13:00:00"
+        as_of = datetime(2026, 10, 14, 15, 0, 0)
+
+        durations_with = self.engine.get_period_durations(as_of=as_of, include_running=True)
+        durations_without = self.engine.get_period_durations(as_of=as_of, include_running=False)
+
+        self.assertEqual(durations_with["day"], 7200.0)
+        self.assertEqual(durations_without["day"], 0.0)
+
+    def test_tick_includes_period_durations(self):
+        task = self.engine.create_task("Period Ticks Task")
+        self.engine.clock_in()
+
+        tick_events = []
+        self.bus.subscribe(EventType.TICK, lambda e: tick_events.append(e))
+
+        payload = self.engine.tick()
+        self.assertIn("day_duration", payload)
+        self.assertIn("day_duration_formatted", payload)
+        self.assertIn("week_duration", payload)
+        self.assertIn("week_duration_formatted", payload)
+        self.assertIn("month_duration", payload)
+        self.assertIn("month_duration_formatted", payload)
+        self.assertEqual(len(tick_events), 1)
+        self.assertEqual(tick_events[0].data["day_duration_formatted"], payload["day_duration_formatted"])
 
 
 if __name__ == "__main__":

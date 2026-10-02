@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import Any, Dict, List, Optional
 
 
@@ -23,6 +23,55 @@ def format_duration(seconds: float) -> str:
     minutes = (total_seconds % 3600) // 60
     secs = total_seconds % 60
     return f"{hours:02d}:{minutes:02d}:{secs:02d}"
+
+
+def get_period_bounds(as_of: Optional[datetime] = None) -> Dict[str, datetime]:
+    """Calculate start boundary datetimes for current day, week (Monday), and month."""
+    dt = as_of if as_of is not None else datetime.now()
+    day_start = dt.replace(hour=0, minute=0, second=0, microsecond=0)
+    week_start = day_start - timedelta(days=dt.weekday())
+    month_start = dt.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+    return {
+        "day": day_start,
+        "week": week_start,
+        "month": month_start,
+    }
+
+
+def calculate_interval_overlap(
+    start_dt: datetime,
+    end_dt: datetime,
+    window_start: datetime,
+    window_end: datetime,
+) -> float:
+    """Calculate overlap duration in seconds between an interval [start_dt, end_dt] and a window [window_start, window_end]."""
+    overlap_start = max(start_dt, window_start)
+    overlap_end = min(end_dt, window_end)
+    if overlap_end > overlap_start:
+        return (overlap_end - overlap_start).total_seconds()
+    return 0.0
+
+
+@dataclass
+class PeriodDurations:
+    """Container for day, week, and month aggregate durations in seconds."""
+    day: float = 0.0
+    week: float = 0.0
+    month: float = 0.0
+
+    def formatted_dict(self) -> Dict[str, str]:
+        return {
+            "day": format_duration(self.day),
+            "week": format_duration(self.week),
+            "month": format_duration(self.month),
+        }
+
+    def to_dict(self) -> Dict[str, float]:
+        return {
+            "day": self.day,
+            "week": self.week,
+            "month": self.month,
+        }
 
 
 @dataclass

@@ -90,7 +90,42 @@ class ClockPanel(ttk.LabelFrame):
             font=("Helvetica", 9, "italic"),
             anchor=tk.CENTER
         )
-        last_reported_lbl.pack(fill=tk.X, pady=(0, 12))
+        last_reported_lbl.pack(fill=tk.X, pady=(0, 10))
+
+        # All Tasks Period Summary Section
+        period_frame = ttk.LabelFrame(self, text="All Tasks Summary", padding=6)
+        period_frame.pack(fill=tk.X, pady=(0, 12))
+
+        period_cols = ttk.Frame(period_frame)
+        period_cols.pack(fill=tk.X, expand=True)
+
+        self.day_time_var = tk.StringVar(value="Day: 00:00:00")
+        self.week_time_var = tk.StringVar(value="Week: 00:00:00")
+        self.month_time_var = tk.StringVar(value="Month: 00:00:00")
+
+        self.day_label = ttk.Label(
+            period_cols,
+            textvariable=self.day_time_var,
+            font=("Helvetica", 10, "bold"),
+            anchor=tk.CENTER,
+        )
+        self.day_label.pack(side=tk.LEFT, fill=tk.X, expand=True)
+
+        self.week_label = ttk.Label(
+            period_cols,
+            textvariable=self.week_time_var,
+            font=("Helvetica", 10, "bold"),
+            anchor=tk.CENTER,
+        )
+        self.week_label.pack(side=tk.LEFT, fill=tk.X, expand=True)
+
+        self.month_label = ttk.Label(
+            period_cols,
+            textvariable=self.month_time_var,
+            font=("Helvetica", 10, "bold"),
+            anchor=tk.CENTER,
+        )
+        self.month_label.pack(side=tk.LEFT, fill=tk.X, expand=True)
 
         # Action Buttons Section
         btn_frame = ttk.Frame(self)
@@ -240,6 +275,11 @@ class ClockPanel(ttk.LabelFrame):
             self.total_time_var.set(f"Total Time: {format_duration(total_duration)}")
             self.unreported_time_var.set(f"Unreported Time: {format_duration(unreported_duration)}")
 
+        periods = self.engine.get_period_durations(include_running=self.engine.state.is_running)
+        self.day_time_var.set(f"Day: {format_duration(periods['day'])}")
+        self.week_time_var.set(f"Week: {format_duration(periods['week'])}")
+        self.month_time_var.set(f"Month: {format_duration(periods['month'])}")
+
     def _on_task_created_event(self, event: Event) -> None:
         self.refresh_display()
 
@@ -278,3 +318,9 @@ class ClockPanel(ttk.LabelFrame):
             self.timer_var.set(data.get("session_duration_formatted", "00:00:00"))
             self.total_time_var.set(f"Total Time: {data.get('total_duration_formatted', '00:00:00')}")
             self.unreported_time_var.set(f"Unreported Time: {data.get('unreported_duration_formatted', '00:00:00')}")
+        if "day_duration_formatted" in data:
+            self.day_time_var.set(f"Day: {data.get('day_duration_formatted', '00:00:00')}")
+        if "week_duration_formatted" in data:
+            self.week_time_var.set(f"Week: {data.get('week_duration_formatted', '00:00:00')}")
+        if "month_duration_formatted" in data:
+            self.month_time_var.set(f"Month: {data.get('month_duration_formatted', '00:00:00')}")

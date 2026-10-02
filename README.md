@@ -36,9 +36,10 @@ The Time Clock window is organized into three intuitive areas:
 +------------------------------------+------------------------------------+
 |  Tasks Panel (Left)                |  Clock Tracker (Top Right)         |
 |  - Add new tasks                   |  - Active task status & timer      |
-|  - Select, rename, archive, delete |  - Clock In / Clock Out button     |
-|  - Show/hide archived tasks        |  - Mark Reported button            |
-|  - View total & unreported times   +------------------------------------+
+|  - Select, rename, archive, delete |  - All Tasks Summary: Day/Week/Mo  |
+|  - Show/hide archived tasks        |  - Clock In / Clock Out button     |
+|  - View total & unreported times   |  - Mark Reported button            |
+|                                    +------------------------------------+
 |                                    |  Session History (Bottom Right)    |
 |                                    |  - Detailed session timestamps     |
 |                                    |  - Reported vs unreported status   |
@@ -121,6 +122,14 @@ The **Clock Tracker** panel in the upper right gives you full control over timin
 1. When you pause or finish working on the task, click **Clock Out**.
 2. The session ends, the timer resets to `00:00:00`, and the completed work interval is automatically saved to the **Session History** table.
 3. Both **Total Time** and **Unreported Time** for the task update instantly.
+
+### Aggregate Period Counters (Day, Week, Month)
+Directly below the active task counters in the **Clock Tracker**, the **All Tasks Summary** displays your total cumulative hours across all tasks:
+- **Day**: Total time logged today (starting from midnight 00:00:00 local time).
+- **Week**: Total time logged during the current calendar week (starting Monday at 00:00:00).
+- **Month**: Total time logged during the current calendar month (starting on the 1st of the month at 00:00:00).
+- **Includes Archived Tasks**: Hours logged to archived projects are automatically included in Day, Week, and Month totals, ensuring your progress and timesheet totals remain completely accurate even when old tasks are archived.
+- **Real-Time Ticking**: While clocked in, these period counters dynamically increment second-by-second alongside your active session.
 
 ### Safe Auto-Save on Exit
 If you close the application window while a timer is running, Time Clock automatically clocks you out and safely records the active session before closing.

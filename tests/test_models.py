@@ -2,7 +2,17 @@
 import unittest
 from datetime import datetime
 
-from time_clock.models import AppState, Task, TimeEntry, format_duration, iso_now, parse_iso
+from time_clock.models import (
+    AppState,
+    PeriodDurations,
+    Task,
+    TimeEntry,
+    calculate_interval_overlap,
+    format_duration,
+    get_period_bounds,
+    iso_now,
+    parse_iso,
+)
 
 
 class TestModels(unittest.TestCase):
@@ -147,6 +157,117 @@ class TestModels(unittest.TestCase):
         self.assertEqual(restored.active_task_id, "t1")
         self.assertTrue(restored.is_running)
         self.assertEqual(restored.current_session_start, "2026-09-30T09:00:00")
+
+    def test_get_period_bounds(self):
+        # Wednesday 2026-10-07 14:30:00
+        ref_dt = datetime(2026, 10, 7, 14, 30, 0)
+        bounds = get_period_bounds(ref_dt)
+        self.assertEqual(bounds["day"], datetime(2026, 10, 7, 0, 0, 0))
+        self.assertEqual(bounds["week"], datetime(2026, 10, 5, 0, 0, 0))  # Monday
+        self.assertEqual(bounds["month"], datetime(2026, 10, 1, 0, 0, 0))
+
+        # Sunday 2026-10-11 23:59:59
+        ref_sunday = datetime(2026, 10, 11, 23, 59, 59)
+        bounds_sunday = get_period_bounds(ref_sunday)
+        self.assertEqual(bounds_sunday["day"], datetime(2026, 10, 11, 0, 0, 0))
+        self.assertEqual(bounds_sunday["week"], datetime(2026, 10, 5, 0, 0, 0))
+        self.assertEqual(bounds_sunday["month"], datetime(2026, 10, 1, 0, 0, 0))
+
+        # Monday 2026-10-05 00:00:00
+        ref_monday = datetime(2026, 10, 5, 0, 0, 0)
+        bounds_monday = get_period_bounds(ref_monday)
+        self.assertEqual(bounds_monday["day"], datetime(2026, 10, 5, 0, 0, 0))
+        self.assertEqual(bounds_monday["week"], datetime(2026, 10, 5, 0, 0, 0))
+        self.assertEqual(bounds_monday["month"], datetime(2026, 10, 1, 0, 0, 0))
+
+    def test_calculate_interval_overlap(self):
+        w_start = datetime(2026, 10, 1, 0, 0, 0)
+        w_end = datetime(2026, 10, 1, 12, 0, 0)
+
+        # 1. Full containment
+        self.assertEqual(
+            calculate_interval_overlap(
+                datetime(2026, 10, 1, 2, 0, 0),
+                datetime(2026, 10, 1, 4, 0, 0),
+                w_start,
+                w_end,
+            ),
+            7200.0,
+        )
+
+        # 2. Straddling start
+        self.assertEqual(
+            calculate_interval_overlap(
+                datetime(2026, 9, 30, 23, 0, 0),
+                datetime(2026, 10, 1, 1, 0, 0),
+                w_start,
+                w_end,
+            ),
+            3600.0,
+        )
+
+        # 3. Straddling end
+        self.assertEqual(
+            calculate_interval_overlap(
+                datetime(2026, 10, 1, 11, 0, 0),
+                datetime(2026, 10, 1, 13, 0, 0),
+                w_start,
+                w_end,
+            ),
+            3600.0,
+        )
+
+        # 4. Completely outside before
+        self.assertEqual(
+            calculate_interval_overlap(
+                datetime(2026, 9, 30, 20, 0, 0),
+                datetime(2026, 9, 30, 22, 0, 0),
+                w_start,
+                w_end,
+            ),
+            0.0,
+        )
+
+        # 5. Completely outside after
+        self.assertEqual(
+            calculate_interval_overlap(
+                datetime(2026, 10, 1, 13, 0, 0),
+                datetime(2026, 10, 1, 14, 0, 0),
+                w_start,
+                w_end,
+            ),
+            0.0,
+        )
+
+        # 6. Spanning entire window
+        self.assertEqual(
+            calculate_interval_overlap(
+                datetime(2026, 9, 30, 0, 0, 0),
+                datetime(2026, 10, 2, 0, 0, 0),
+                w_start,
+                w_end,
+            ),
+            43200.0,
+        )
+
+    def test_period_durations_dataclass(self):
+        pd = PeriodDurations(day=3661.0, week=7200.0, month=10800.0)
+        self.assertEqual(
+            pd.formatted_dict(),
+            {
+                "day": "01:01:01",
+                "week": "02:00:00",
+                "month": "03:00:00",
+            },
+        )
+        self.assertEqual(
+            pd.to_dict(),
+            {
+                "day": 3661.0,
+                "week": 7200.0,
+                "month": 10800.0,
+            },
+        )
 
 
 if __name__ == "__main__":

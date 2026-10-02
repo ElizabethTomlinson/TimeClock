@@ -7,7 +7,17 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional, Union
 
 from time_clock.events import EventBus, EventType
-from time_clock.models import AppState, Task, TimeEntry, format_duration, iso_now, parse_iso
+from time_clock.models import (
+    AppState,
+    PeriodDurations,
+    Task,
+    TimeEntry,
+    calculate_interval_overlap,
+    format_duration,
+    get_period_bounds,
+    iso_now,
+    parse_iso,
+)
 from time_clock.storage import SQLiteStorage, Storage
 
 
@@ -201,6 +211,56 @@ class TimeClockEngine:
             for task in self.get_tasks()
         )
 
+    def get_period_durations(
+        self,
+        as_of: Optional[datetime] = None,
+        include_running: bool = True,
+    ) -> Dict[str, float]:
+        """Calculate total accumulated duration in seconds for day, week, and month across all tasks."""
+        now_dt = as_of if as_of is not None else datetime.now()
+        bounds = get_period_bounds(now_dt)
+        day_start = bounds["day"]
+        week_start = bounds["week"]
+        month_start = bounds["month"]
+
+        day_sec = 0.0
+        week_sec = 0.0
+        month_sec = 0.0
+
+        for task in self.state.tasks.values():
+            for entry in task.entries:
+                if not entry.end_time:
+                    continue
+                try:
+                    start_dt = parse_iso(entry.start_time)
+                    end_dt = parse_iso(entry.end_time)
+                    day_sec += calculate_interval_overlap(start_dt, end_dt, day_start, now_dt)
+                    week_sec += calculate_interval_overlap(start_dt, end_dt, week_start, now_dt)
+                    month_sec += calculate_interval_overlap(start_dt, end_dt, month_start, now_dt)
+                except Exception:
+                    pass
+
+        if (
+            include_running
+            and self.state.is_running
+            and self.state.current_session_start
+        ):
+            try:
+                start_dt = parse_iso(self.state.current_session_start)
+                end_dt = now_dt
+                if end_dt > start_dt:
+                    day_sec += calculate_interval_overlap(start_dt, end_dt, day_start, now_dt)
+                    week_sec += calculate_interval_overlap(start_dt, end_dt, week_start, now_dt)
+                    month_sec += calculate_interval_overlap(start_dt, end_dt, month_start, now_dt)
+            except Exception:
+                pass
+
+        return {
+            "day": day_sec,
+            "week": week_sec,
+            "month": month_sec,
+        }
+
     def get_task(self, task_id: str) -> Optional[Task]:
         """Retrieve task by id."""
         return self.state.tasks.get(task_id)
@@ -315,6 +375,8 @@ class TimeClockEngine:
         )
         last_reported_at = active_task.last_reported_at if active_task else None
 
+        period_durations = self.get_period_durations(include_running=True)
+
         payload = {
             "is_running": self.state.is_running,
             "session_duration": session_duration,
@@ -327,6 +389,12 @@ class TimeClockEngine:
             "active_task_id": self.state.active_task_id,
             "active_task_name": active_task.name if active_task else None,
             "current_session_start": self.state.current_session_start,
+            "day_duration": period_durations["day"],
+            "day_duration_formatted": format_duration(period_durations["day"]),
+            "week_duration": period_durations["week"],
+            "week_duration_formatted": format_duration(period_durations["week"]),
+            "month_duration": period_durations["month"],
+            "month_duration_formatted": format_duration(period_durations["month"]),
         }
         self.event_bus.emit(EventType.TICK, payload)
         return payload
