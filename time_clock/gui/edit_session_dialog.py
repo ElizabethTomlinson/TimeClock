@@ -33,6 +33,9 @@ class EditClockInOutDialog(tk.Toplevel):
         self.transient(parent)
         self.grab_set()
 
+        self.protocol("WM_DELETE_WINDOW", self.destroy)
+        self.bind("<Destroy>", self._on_destroy_event)
+
         self._build_ui()
         self._register_events()
         self._populate_tasks()
@@ -179,6 +182,22 @@ class EditClockInOutDialog(tk.Toplevel):
         self.engine.event_bus.subscribe(EventType.CLOCK_IN, self._on_engine_state_event)
         self.engine.event_bus.subscribe(EventType.CLOCK_OUT, self._on_engine_state_event)
 
+    def _unregister_events(self) -> None:
+        try:
+            self.engine.event_bus.unsubscribe(EventType.ENTRY_UPDATED, self._on_entry_updated_event)
+            self.engine.event_bus.unsubscribe(EventType.CLOCK_IN, self._on_engine_state_event)
+            self.engine.event_bus.unsubscribe(EventType.CLOCK_OUT, self._on_engine_state_event)
+        except Exception:
+            pass
+
+    def _on_destroy_event(self, event: tk.Event) -> None:
+        if event.widget == self:
+            self._unregister_events()
+
+    def destroy(self) -> None:
+        self._unregister_events()
+        super().destroy()
+
     def _populate_tasks(self) -> None:
         tasks = self.engine.get_tasks(include_archived=True)
         self._task_options: List[tuple[str, str]] = []
@@ -209,6 +228,12 @@ class EditClockInOutDialog(tk.Toplevel):
             self._load_task_data()
 
     def _load_task_data(self) -> None:
+        try:
+            if not self.winfo_exists():
+                return
+        except Exception:
+            return
+
         if not self.selected_task_id:
             return
 
@@ -216,47 +241,50 @@ class EditClockInOutDialog(tk.Toplevel):
         if not task:
             return
 
-        # 1. Active Session State
-        is_active_and_running = (
-            self.engine.state.is_running
-            and self.engine.state.active_task_id == self.selected_task_id
-        )
-
-        if is_active_and_running:
-            start_str = self.engine.state.current_session_start or ""
-            display_start = start_str.split(".")[0].replace("T", " ")
-            self.active_status_lbl.configure(
-                text=f"Task is actively clocked in since: {display_start}",
-                foreground="#005fb8",
+        try:
+            # 1. Active Session State
+            is_active_and_running = (
+                self.engine.state.is_running
+                and self.engine.state.active_task_id == self.selected_task_id
             )
-            self.active_start_var.set(display_start)
-            self.active_start_entry.configure(state=tk.NORMAL)
-            self.active_apply_btn.configure(state=tk.NORMAL)
-        else:
-            self.active_status_lbl.configure(
-                text="Task is not currently clocked in.",
-                foreground="#666666",
-            )
-            self.active_start_var.set("")
-            self.active_start_entry.configure(state=tk.DISABLED)
-            self.active_apply_btn.configure(state=tk.DISABLED)
 
-        # 2. Historical Entries Table
-        for item in self.tree.get_children():
-            self.tree.delete(item)
+            if is_active_and_running:
+                start_str = self.engine.state.current_session_start or ""
+                display_start = start_str.split(".")[0].replace("T", " ")
+                self.active_status_lbl.configure(
+                    text=f"Task is actively clocked in since: {display_start}",
+                    foreground="#005fb8",
+                )
+                self.active_start_var.set(display_start)
+                self.active_start_entry.configure(state=tk.NORMAL)
+                self.active_apply_btn.configure(state=tk.NORMAL)
+            else:
+                self.active_status_lbl.configure(
+                    text="Task is not currently clocked in.",
+                    foreground="#666666",
+                )
+                self.active_start_var.set("")
+                self.active_start_entry.configure(state=tk.DISABLED)
+                self.active_apply_btn.configure(state=tk.DISABLED)
 
-        self._entry_map.clear()
-        self._selected_entry_id = None
-        self.entry_start_var.set("")
-        self.entry_end_var.set("")
+            # 2. Historical Entries Table
+            for item in self.tree.get_children():
+                self.tree.delete(item)
 
-        entries = list(task.entries)
-        for idx, entry in enumerate(entries, start=1):
-            self._entry_map[entry.id] = entry
-            start_str = entry.start_time.split(".")[0].replace("T", " ")
-            end_str = (entry.end_time or "--").split(".")[0].replace("T", " ")
-            dur_str = format_duration(entry.duration_seconds)
-            self.tree.insert("", tk.END, iid=entry.id, values=(idx, start_str, end_str, dur_str))
+            self._entry_map.clear()
+            self._selected_entry_id = None
+            self.entry_start_var.set("")
+            self.entry_end_var.set("")
+
+            entries = list(task.entries)
+            for idx, entry in enumerate(entries, start=1):
+                self._entry_map[entry.id] = entry
+                start_str = entry.start_time.split(".")[0].replace("T", " ")
+                end_str = (entry.end_time or "--").split(".")[0].replace("T", " ")
+                dur_str = format_duration(entry.duration_seconds)
+                self.tree.insert("", tk.END, iid=entry.id, values=(idx, start_str, end_str, dur_str))
+        except Exception:
+            pass
 
     def _on_tree_select(self, event: Optional[tk.Event] = None) -> None:
         selection = self.tree.selection()
@@ -348,7 +376,17 @@ class EditClockInOutDialog(tk.Toplevel):
             messagebox.showerror("Error", str(e), parent=self)
 
     def _on_entry_updated_event(self, event: Event) -> None:
+        try:
+            if not self.winfo_exists():
+                return
+        except Exception:
+            return
         self._load_task_data()
 
     def _on_engine_state_event(self, event: Event) -> None:
+        try:
+            if not self.winfo_exists():
+                return
+        except Exception:
+            return
         self._load_task_data()

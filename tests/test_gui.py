@@ -558,6 +558,28 @@ class TestGUI(unittest.TestCase):
         mock_error.assert_called()
         dialog.destroy()
 
+    def test_edit_clock_in_out_dialog_unsubscribes_on_destroy(self):
+        app = TimeClockApp(root=self.root, engine=self.engine)
+        t = self.engine.create_task("Unsubscribe Task")
+        self.engine.select_task(t.id)
+
+        dialog = EditClockInOutDialog(parent=self.root, engine=self.engine)
+        self.root.update_idletasks()
+
+        # Destroy dialog
+        dialog.destroy()
+        self.root.update_idletasks()
+
+        # Verify that subsequent clock operations and events do not raise TclError
+        self.engine.clock_in()
+        self.root.update_idletasks()
+
+        self.engine.clock_out()
+        self.root.update_idletasks()
+
+        self.engine.add_manual_time_entry(t.id, "2026-10-01T09:00:00", "2026-10-01T10:00:00")
+        self.root.update_idletasks()
+
 
 if __name__ == "__main__":
     unittest.main()
