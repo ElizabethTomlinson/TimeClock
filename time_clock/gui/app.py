@@ -41,8 +41,18 @@ class TimeClockApp:
 
     def _configure_window(self) -> None:
         self.root.title("Time Clock")
-        self.root.geometry("1424x680")
+        width = 1424
+        height = 680
         self.root.minsize(820, 520)
+        self.root.update_idletasks()
+        try:
+            screen_width = self.root.winfo_screenwidth()
+            screen_height = self.root.winfo_screenheight()
+            x = max(0, (screen_width - width) // 2)
+            y = max(0, (screen_height - height) // 2)
+            self.root.geometry(f"{width}x{height}+{x}+{y}")
+        except Exception:
+            self.root.geometry(f"{width}x{height}")
 
     def _setup_styles(self) -> None:
         self.style = ttk.Style(self.root)

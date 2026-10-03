@@ -30,7 +30,6 @@ class EditClockInOutDialog(tk.Toplevel):
         self.geometry("640x620")
         self.minsize(580, 520)
 
-        self.transient(parent)
         self.grab_set()
 
         self.protocol("WM_DELETE_WINDOW", self.destroy)
@@ -44,17 +43,27 @@ class EditClockInOutDialog(tk.Toplevel):
         # Center on parent window
         self.update_idletasks()
         try:
-            pw = parent.winfo_width()
-            ph = parent.winfo_height()
-            px = parent.winfo_rootx()
-            py = parent.winfo_rooty()
-            w = self.winfo_width()
-            h = self.winfo_height()
-            x = px + max(0, (pw - w) // 2)
-            y = py + max(0, (ph - h) // 2)
-            self.geometry(f"+{x}+{y}")
+            w = 640
+            h = 620
+            parent_top = parent.winfo_toplevel() if parent is not None else None
+            if parent_top is not None and parent_top.winfo_ismapped():
+                parent_top.update_idletasks()
+                pw = parent_top.winfo_width()
+                ph = parent_top.winfo_height()
+                px = parent_top.winfo_rootx()
+                py = parent_top.winfo_rooty()
+                x = px + max(0, (pw - w) // 2)
+                y = py + max(0, (ph - h) // 2)
+            else:
+                sw = self.winfo_screenwidth()
+                sh = self.winfo_screenheight()
+                x = max(0, (sw - w) // 2)
+                y = max(0, (sh - h) // 2)
+            self.geometry(f"{w}x{h}+{x}+{y}")
         except Exception:
             pass
+
+        self.lift()
 
     def _build_ui(self) -> None:
         main_frame = ttk.Frame(self, padding=12)

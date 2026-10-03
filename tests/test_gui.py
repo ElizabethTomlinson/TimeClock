@@ -11,6 +11,7 @@ from time_clock.engine import TimeClockEngine
 from time_clock.events import EventBus
 from time_clock.gui.app import TimeClockApp
 from time_clock.gui.edit_session_dialog import EditClockInOutDialog
+from time_clock.gui.prompt_dialog import InputDialog, ask_string
 from time_clock.models import TimeEntry
 from time_clock.storage import SQLiteStorage
 
@@ -254,7 +255,7 @@ class TestGUI(unittest.TestCase):
         self.assertEqual(app.task_panel.tree.item(task.id, "tags"), ("has_unreported",))
         self.assertTrue(app.task_panel.summary_var.get().startswith("Unreported: 1 project ("))
 
-    @patch("time_clock.gui.task_panel.simpledialog.askstring")
+    @patch("time_clock.gui.task_panel.ask_string")
     def test_task_panel_dialog_add_task_success(self, mock_askstring):
         mock_askstring.return_value = "Dialog Project"
         app = TimeClockApp(root=self.root, engine=self.engine)
@@ -270,7 +271,7 @@ class TestGUI(unittest.TestCase):
         self.assertEqual(len(children), 1)
         self.assertEqual(app.task_panel.tree.item(children[0], "values")[0], "Dialog Project")
 
-    @patch("time_clock.gui.task_panel.simpledialog.askstring")
+    @patch("time_clock.gui.task_panel.ask_string")
     def test_task_panel_dialog_add_task_cancelled(self, mock_askstring):
         mock_askstring.return_value = None
         app = TimeClockApp(root=self.root, engine=self.engine)
@@ -284,7 +285,7 @@ class TestGUI(unittest.TestCase):
         self.assertEqual(len(app.task_panel.tree.get_children()), 0)
 
     @patch("time_clock.gui.task_panel.messagebox.showwarning")
-    @patch("time_clock.gui.task_panel.simpledialog.askstring")
+    @patch("time_clock.gui.task_panel.ask_string")
     def test_task_panel_dialog_add_task_empty(self, mock_askstring, mock_showwarning):
         mock_askstring.return_value = "   "
         app = TimeClockApp(root=self.root, engine=self.engine)
@@ -298,7 +299,7 @@ class TestGUI(unittest.TestCase):
         self.assertEqual(len(tasks), 0)
 
     @patch("time_clock.gui.task_panel.messagebox.showerror")
-    @patch("time_clock.gui.task_panel.simpledialog.askstring")
+    @patch("time_clock.gui.task_panel.ask_string")
     def test_task_panel_dialog_add_task_error(self, mock_askstring, mock_showerror):
         mock_askstring.return_value = "Error Project"
         app = TimeClockApp(root=self.root, engine=self.engine)
@@ -579,6 +580,70 @@ class TestGUI(unittest.TestCase):
 
         self.engine.add_manual_time_entry(t.id, "2026-10-01T09:00:00", "2026-10-01T10:00:00")
         self.root.update_idletasks()
+
+    def test_app_window_configuration_centering(self):
+        app = TimeClockApp(root=self.root, engine=self.engine)
+        self.root.update_idletasks()
+        geom = self.root.geometry()
+        # Geometry should start with 1424x680 and have offset coordinates
+        self.assertTrue(geom.startswith("1424x680"))
+
+    def test_input_dialog_ok(self):
+        def auto_ok(d):
+            self.root.update_idletasks()
+            d.entry_var.set("Created From Test")
+            d._on_ok()
+
+        self.root.after(50, lambda: auto_ok(self.root.winfo_children()[-1]))
+        res = ask_string("Test Dialog", "Enter text:", parent=self.root)
+        self.assertEqual(res, "Created From Test")
+
+    def test_input_dialog_cancel(self):
+        def auto_cancel(d):
+            self.root.update_idletasks()
+            d._on_cancel()
+
+        self.root.after(50, lambda: auto_cancel(self.root.winfo_children()[-1]))
+        res = ask_string("Test Cancel Dialog", "Enter text:", initialvalue="Default", parent=self.root)
+        self.assertIsNone(res)
+
+    def test_edit_clock_in_out_dialog_centering(self):
+        dialog = EditClockInOutDialog(parent=self.root, engine=self.engine)
+        self.root.update_idletasks()
+        geom = dialog.geometry()
+        self.assertTrue(geom.startswith("640x620"))
+        dialog.destroy()
+
+    def test_input_dialog_parent_relative_centering(self):
+        self.root.deiconify()
+        self.root.geometry("800x600+1200+300")
+        self.root.update_idletasks()
+
+        def close_dialog(d):
+            self.root.update_idletasks()
+            geom = d.geometry()
+            # Dialog width=380, height=150.
+            # Parent x=1200, y=300 (or root offset), w=800, h=600
+            # Expected x = 1200 + (800-380)//2 = 1410
+            # Expected y = 300 + (600-150)//2 = 525 (approx depending on wm decoration)
+            self.assertTrue(geom.startswith("380x150+"))
+            d._on_cancel()
+
+        self.root.after(50, lambda: close_dialog(self.root.winfo_children()[-1]))
+        ask_string("Position Test", "Enter text:", parent=self.root)
+        self.root.withdraw()
+
+    def test_edit_session_dialog_parent_relative_centering(self):
+        self.root.deiconify()
+        self.root.geometry("1000x800+1500+200")
+        self.root.update_idletasks()
+
+        dialog = EditClockInOutDialog(parent=self.root, engine=self.engine)
+        self.root.update_idletasks()
+        geom = dialog.geometry()
+        self.assertTrue(geom.startswith("640x620+"))
+        dialog.destroy()
+        self.root.withdraw()
 
 
 if __name__ == "__main__":

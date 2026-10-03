@@ -2,11 +2,12 @@
 from __future__ import annotations
 
 import tkinter as tk
-from tkinter import messagebox, simpledialog, ttk
+from tkinter import messagebox, ttk
 from typing import Optional
 
 from time_clock.engine import TimeClockEngine
 from time_clock.events import Event, EventType
+from time_clock.gui.prompt_dialog import ask_string
 from time_clock.models import Task, format_duration, iso_now, parse_iso
 
 
@@ -199,7 +200,7 @@ class ClockPanel(ttk.LabelFrame):
             try:
                 self.engine.mark_task_reported(active_task.id)
             except Exception as e:
-                messagebox.showerror("Error", str(e))
+                messagebox.showerror("Error", str(e), parent=self.winfo_toplevel())
 
     def _mark_reported_custom(self) -> None:
         active_task = self.engine.get_active_task()
@@ -207,10 +208,11 @@ class ClockPanel(ttk.LabelFrame):
             return
 
         initial = active_task.last_reported_at or iso_now()
-        ts = simpledialog.askstring(
+        ts = ask_string(
             "Reported Cutoff Timestamp",
             "Enter ISO-8601 timestamp (e.g. 2026-10-01T09:00:00):",
             initialvalue=initial,
+            parent=self.winfo_toplevel(),
         )
         if ts and ts.strip():
             clean_ts = ts.strip()
@@ -220,12 +222,13 @@ class ClockPanel(ttk.LabelFrame):
                 messagebox.showerror(
                     "Invalid Timestamp",
                     f"'{clean_ts}' is not a valid ISO timestamp format.\nExample: 2026-10-01T09:00:00",
+                    parent=self.winfo_toplevel(),
                 )
                 return
             try:
                 self.engine.mark_task_reported(active_task.id, clean_ts)
             except Exception as e:
-                messagebox.showerror("Error", str(e))
+                messagebox.showerror("Error", str(e), parent=self.winfo_toplevel())
 
     def _clear_reported_status(self) -> None:
         active_task = self.engine.get_active_task()
@@ -233,7 +236,7 @@ class ClockPanel(ttk.LabelFrame):
             try:
                 self.engine.clear_task_reported(active_task.id)
             except Exception as e:
-                messagebox.showerror("Error", str(e))
+                messagebox.showerror("Error", str(e), parent=self.winfo_toplevel())
 
     def refresh_display(self) -> None:
         """Update all labels and buttons based on current engine state."""

@@ -2,11 +2,12 @@
 from __future__ import annotations
 
 import tkinter as tk
-from tkinter import messagebox, simpledialog, ttk
+from tkinter import messagebox, ttk
 from typing import Optional
 
 from time_clock.engine import TimeClockEngine
 from time_clock.events import Event, EventType
+from time_clock.gui.prompt_dialog import ask_string
 from time_clock.models import Task, format_duration, iso_now, parse_iso
 
 
@@ -118,7 +119,7 @@ class TaskPanel(ttk.LabelFrame):
         self.engine.event_bus.subscribe(EventType.STATE_LOADED, self._on_state_loaded_event)
 
     def _on_add_task(self) -> None:
-        name = simpledialog.askstring(
+        name = ask_string(
             "New Task",
             "Enter task name:",
             parent=self.winfo_toplevel(),
@@ -191,23 +192,28 @@ class TaskPanel(ttk.LabelFrame):
     def _on_rename_task(self) -> None:
         selection = self.tree.selection()
         if not selection:
-            messagebox.showinfo("Select Task", "Please select a task to rename.")
+            messagebox.showinfo("Select Task", "Please select a task to rename.", parent=self.winfo_toplevel())
             return
         task_id = selection[0]
         task = self.engine.get_task(task_id)
         if not task:
             return
-        new_name = simpledialog.askstring("Rename Task", "Enter new task name:", initialvalue=task.name)
+        new_name = ask_string(
+            "Rename Task",
+            "Enter new task name:",
+            initialvalue=task.name,
+            parent=self.winfo_toplevel(),
+        )
         if new_name and new_name.strip():
             try:
                 self.engine.rename_task(task_id, new_name.strip())
             except Exception as e:
-                messagebox.showerror("Error", str(e))
+                messagebox.showerror("Error", str(e), parent=self.winfo_toplevel())
 
     def _on_mark_reported_menu(self) -> None:
         selection = self.tree.selection()
         if not selection:
-            messagebox.showinfo("Select Task", "Please select a task first.")
+            messagebox.showinfo("Select Task", "Please select a task first.", parent=self.winfo_toplevel())
             return
         task_id = selection[0]
         task = self.engine.get_task(task_id)
@@ -230,17 +236,18 @@ class TaskPanel(ttk.LabelFrame):
         try:
             self.engine.mark_task_reported(task_id)
         except Exception as e:
-            messagebox.showerror("Error", str(e))
+            messagebox.showerror("Error", str(e), parent=self.winfo_toplevel())
 
     def _mark_reported_custom(self, task_id: str) -> None:
         task = self.engine.get_task(task_id)
         if not task:
             return
         initial = task.last_reported_at or iso_now()
-        ts = simpledialog.askstring(
+        ts = ask_string(
             "Reported Cutoff Timestamp",
             "Enter ISO-8601 timestamp (e.g. 2026-10-01T09:00:00):",
             initialvalue=initial,
+            parent=self.winfo_toplevel(),
         )
         if ts and ts.strip():
             clean_ts = ts.strip()
@@ -250,23 +257,24 @@ class TaskPanel(ttk.LabelFrame):
                 messagebox.showerror(
                     "Invalid Timestamp",
                     f"'{clean_ts}' is not a valid ISO timestamp format.\nExample: 2026-10-01T09:00:00",
+                    parent=self.winfo_toplevel(),
                 )
                 return
             try:
                 self.engine.mark_task_reported(task_id, clean_ts)
             except Exception as e:
-                messagebox.showerror("Error", str(e))
+                messagebox.showerror("Error", str(e), parent=self.winfo_toplevel())
 
     def _clear_reported_status(self, task_id: str) -> None:
         try:
             self.engine.clear_task_reported(task_id)
         except Exception as e:
-            messagebox.showerror("Error", str(e))
+            messagebox.showerror("Error", str(e), parent=self.winfo_toplevel())
 
     def _on_delete_task(self) -> None:
         selection = self.tree.selection()
         if not selection:
-            messagebox.showinfo("Select Task", "Please select a task to delete.")
+            messagebox.showinfo("Select Task", "Please select a task to delete.", parent=self.winfo_toplevel())
             return
         task_id = selection[0]
         task = self.engine.get_task(task_id)
@@ -275,12 +283,13 @@ class TaskPanel(ttk.LabelFrame):
         confirm = messagebox.askyesno(
             "Confirm Delete",
             f"Are you sure you want to delete task '{task.name}' and all its logged sessions?",
+            parent=self.winfo_toplevel(),
         )
         if confirm:
             try:
                 self.engine.delete_task(task_id)
             except Exception as e:
-                messagebox.showerror("Error", str(e))
+                messagebox.showerror("Error", str(e), parent=self.winfo_toplevel())
 
     def _update_summary(self) -> None:
         """Update aggregate unreported tasks count and total unreported duration."""
