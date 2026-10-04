@@ -181,19 +181,13 @@ class TimeClockApp:
             logger.exception("Error in timer tick: %s", e)
 
     def on_close(self) -> None:
-        """Handle window closing cleanly by stopping timers, clocking out if needed, and saving."""
+        """Handle window closing cleanly by stopping UI tick timers and closing storage."""
         if self._after_id:
             try:
                 self.root.after_cancel(self._after_id)
             except Exception:
                 pass
             self._after_id = None
-
-        try:
-            if self.engine.state.is_running:
-                self.engine.clock_out()
-        except Exception as e:
-            logger.warning("Error clocking out on app exit: %s", e)
 
         try:
             if hasattr(self, "storage") and self.storage:

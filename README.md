@@ -135,8 +135,8 @@ Directly below the active task counters in the **Clock Tracker**, the **All Task
 - **Includes Archived Tasks**: Hours logged to archived projects are automatically included in Day, Week, and Month totals, ensuring your progress and timesheet totals remain completely accurate even when old tasks are archived.
 - **Real-Time Ticking**: While clocked in, these period counters dynamically increment second-by-second alongside your active session.
 
-### Safe Auto-Save on Exit
-If you close the application window while a timer is running, Time Clock automatically clocks you out and safely records the active session before closing.
+### Persistent Running Timer on Exit
+If you close the application window while a timer is running without clocking out, the clock continues running in the background. When you reopen Time Clock, your active session seamlessly resumes from where you left off, with your original start time and elapsed duration preserved.
 
 ---
 
@@ -260,7 +260,7 @@ To export all tasks (including active and archived projects) and all session rec
 - **One Task at a Time**: Select a task before starting work to keep sessions categorized accurately.
 - **Switching Tasks**: When switching projects, click **Clock Out** on the current task, select the new task in the left list, and click **Clock In**.
 - **Weekly or Monthly Reporting**: At the end of each billing cycle or work week, use **Export Data as CSV...** to generate your timesheet report, then click **Mark as Reported Now** to start your next cycle with a clean unreported counter.
-- **Accidental Exits**: Don't worry about losing running time if your computer restarts or the app is closed — active timers are gracefully finalized and saved.
+- **Accidental Exits**: Don't worry about losing running time if your computer restarts or the app is closed — active timers continue running and automatically resume when you reopen the application.
 
 ---
 

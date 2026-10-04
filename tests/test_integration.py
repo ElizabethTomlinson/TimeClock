@@ -99,22 +99,32 @@ class TestIntegration(unittest.TestCase):
             data = json.load(f)
         self.assertEqual(len(data["tasks"]), 2)
 
-    def test_app_on_close_auto_clock_out(self):
+    def test_app_on_close_preserves_running_session(self):
         task = self.engine.create_task("Emergency Task")
         self.engine.select_task(task.id)
-        self.engine.clock_in()
+        start_time = self.engine.clock_in()
         self.assertTrue(self.engine.state.is_running)
 
-        # Simulate graceful shutdown logic
-        if self.engine.state.is_running:
-            self.engine.clock_out()
+        # Simulate closing without clocking out
+        self.storage.close()
 
-        self.assertFalse(self.engine.state.is_running)
+        # Reload across fresh engine and SQLiteStorage instance
+        new_storage = SQLiteStorage(self.db_file)
+        new_engine = TimeClockEngine(storage=new_storage)
+        self.assertTrue(new_engine.state.is_running)
+        self.assertEqual(new_engine.state.current_session_start, start_time)
+        self.assertEqual(len(new_engine.get_task_history(task.id)), 0)
 
-        # Verify disk state has finalized session
-        reloaded_state = self.storage.load()
-        self.assertFalse(reloaded_state.is_running)
-        self.assertEqual(len(reloaded_state.tasks[task.id].entries), 1)
+        # Clock out in resumed engine
+        time.sleep(0.05)
+        entry = new_engine.clock_out()
+        self.assertIsNotNone(entry)
+        self.assertFalse(new_engine.state.is_running)
+        self.assertIsNone(new_engine.state.current_session_start)
+        self.assertEqual(len(new_engine.get_task_history(task.id)), 1)
+        self.assertEqual(entry.start_time, start_time)
+        self.assertGreater(entry.duration_seconds, 0.0)
+        new_storage.close()
 
     def test_reporting_workflow_integration(self):
         # 1. Create a task and log a 1-hour session

@@ -645,6 +645,38 @@ class TestGUI(unittest.TestCase):
         dialog.destroy()
         self.root.withdraw()
 
+    def test_app_on_close_preserves_running_timer(self):
+        app = TimeClockApp(root=self.root, engine=self.engine)
+        task = self.engine.create_task("Close Window Running Task")
+        self.engine.clock_in()
+        self.root.update_idletasks()
+        self.assertTrue(self.engine.state.is_running)
+
+        app.on_close()
+        self.assertTrue(self.engine.state.is_running)
+
+        # Check loaded storage state
+        reloaded = self.storage.load()
+        self.assertTrue(reloaded.is_running)
+        self.assertIsNotNone(reloaded.current_session_start)
+        self.assertEqual(len(reloaded.tasks[task.id].entries), 0)
+
+    def test_app_initialization_with_running_timer(self):
+        task = self.engine.create_task("Pre-running Task")
+        start_ts = self.engine.clock_in()
+
+        # Initialize UI when engine is already running
+        app = TimeClockApp(root=self.root, engine=self.engine)
+        self.root.update_idletasks()
+
+        self.assertIn("Clocked In", app.clock_panel.status_var.get())
+        self.assertEqual(app.clock_panel.toggle_btn.cget("text"), "Clock Out")
+        self.assertIn(start_ts.split(".")[0].replace("T", " "), app.clock_panel.start_time_var.get())
+
+        app._on_tick()
+        self.root.update_idletasks()
+        self.assertIn("Clocked In", app.clock_panel.status_var.get())
+
 
 if __name__ == "__main__":
     unittest.main()
