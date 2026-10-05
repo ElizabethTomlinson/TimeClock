@@ -108,6 +108,7 @@ class Task:
     created_at: str
     last_reported_at: Optional[str] = None
     is_archived: bool = False
+    is_unpaid: bool = False
     entries: List[TimeEntry] = field(default_factory=list)
 
     @property
@@ -117,6 +118,8 @@ class Task:
 
     def calculate_unreported_duration(self, as_of: Optional[str] = None) -> float:
         """Calculate seconds logged since the cutoff timestamp (or self.last_reported_at)."""
+        if self.is_unpaid:
+            return 0.0
         cutoff_str = as_of if as_of is not None else self.last_reported_at
         if not cutoff_str:
             return self.total_duration_seconds
@@ -140,6 +143,7 @@ class Task:
             "created_at": self.created_at,
             "last_reported_at": self.last_reported_at,
             "is_archived": self.is_archived,
+            "is_unpaid": self.is_unpaid,
             "entries": [entry.to_dict() for entry in self.entries],
         }
 
@@ -153,6 +157,7 @@ class Task:
             created_at=data.get("created_at", ""),
             last_reported_at=data.get("last_reported_at"),
             is_archived=bool(data.get("is_archived", False)),
+            is_unpaid=bool(data.get("is_unpaid", False)),
             entries=entries,
         )
 

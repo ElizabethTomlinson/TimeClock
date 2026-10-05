@@ -15,6 +15,8 @@ This document contains project-specific information, setup instructions, testing
 - **`time_clock/gui/`**: Tkinter/ttk desktop interface divided into modular panels:
   - `app.py`: `TimeClockApp` main window and container with `File` and `Advanced` menu bars.
   - `edit_session_dialog.py`: `EditClockInOutDialog` modal for editing active session start times and modifying/adding historical sessions.
+  - `prompt_dialog.py`: Centered single-value prompt input dialog.
+  - `task_options_dialog.py`: `TaskOptionsDialog` modal for task creation and editing task options (name and paid/unpaid status).
   - `task_panel.py`: `TaskPanel` for task selection and management.
   - `clock_panel.py`: `ClockPanel` for timer display and clock in/out controls.
   - `history_panel.py`: `HistoryPanel` for session logs and statistics.
@@ -63,7 +65,7 @@ The project uses Python's standard library `unittest` framework.
 1. Place new test files in the `tests/` directory named `test_<module_or_feature>.py`.
 2. Define a class inheriting from `unittest.TestCase` with test methods prefixed with `test_`.
 3. For tests involving disk persistence (`SQLiteStorage` / `TimeClockEngine`), use `tempfile.mkdtemp()` in `setUp()` and remove the temporary directory in `tearDown()` to prevent side effects on real user data.
-4. For GUI tests (`time_clock/gui/`), create a hidden `tk.Tk()` root (`root.withdraw()`) and catch `tk.TclError` in `setUp()` by calling `self.skipTest(...)` to support headless test environments. Call `root.update_idletasks()` after engine state changes to flush event listeners.
+4. For GUI tests (`time_clock/gui/`), create a hidden `tk.Tk()` root (`root.withdraw()`) and catch `tk.TclError` in `setUp()` by calling `self.skipTest(...)` to support headless test environments. Ensure all `tk.Toplevel` dialogs are automatically withdrawn on creation and mock mapped states (`winfo_ismapped`) rather than calling `deiconify()` to keep the entire test suite completely silent without window popups or stealing OS focus. Call `root.update_idletasks()` after engine state changes to flush event listeners.
 
 ### Example Working Test
 
@@ -99,6 +101,7 @@ python3 -m unittest tests/test_sample.py
 - **Code Style**: Follow PEP 8 (4-space indents, snake_case functions/variables, PascalCase classes, UPPER_SNAKE_CASE constants).
 - **Event Bus Contract**: Whenever modifying `TimeClockEngine` or adding new domain actions, emit the appropriate `EventType` via `self.event_bus.emit(...)`. UI panels subscribe to these events rather than querying engine state on intervals.
 - **Time Representation**: All timestamps are stored in UTC ISO-8601 strings (`iso_now()`) and parsed via `parse_iso()`. Durations are represented in seconds (`float`).
+- **Unpaid Tasks Domain Contract**: Unpaid tasks (`Task.is_unpaid = True`) accumulate total time and period statistics but return `0.0` for unreported durations and are excluded from unreported task aggregates.
 
 ---
 

@@ -7,7 +7,9 @@ from typing import Optional
 
 from time_clock.engine import TimeClockEngine
 from time_clock.events import Event, EventType
+from time_clock.gui.edit_session_dialog import EditClockInOutDialog
 from time_clock.gui.prompt_dialog import ask_string
+from time_clock.gui.task_options_dialog import ask_task_options
 from time_clock.models import Task, format_duration, iso_now, parse_iso
 
 
@@ -48,7 +50,7 @@ class TaskPanel(ttk.LabelFrame):
         list_frame = ttk.Frame(self)
         list_frame.pack(fill=tk.BOTH, expand=True)
 
-        columns = ("name", "total_time", "unreported_time")
+        columns = ("paid", "name", "total_time", "unreported_time")
         self.tree = ttk.Treeview(
             list_frame,
             columns=columns,
@@ -56,15 +58,18 @@ class TaskPanel(ttk.LabelFrame):
             selectmode="browse",
             height=8
         )
+        self.tree.heading("paid", text="💰")
         self.tree.heading("name", text="Task Name")
         self.tree.heading("total_time", text="Total Time")
         self.tree.heading("unreported_time", text="Unreported")
-        self.tree.column("name", width=120, anchor=tk.W)
+        self.tree.column("paid", width=35, minwidth=30, anchor=tk.CENTER, stretch=False)
+        self.tree.column("name", width=180, anchor=tk.W)
         self.tree.column("total_time", width=80, anchor=tk.E)
-        self.tree.column("unreported_time", width=80, anchor=tk.E)
+        self.tree.column("unreported_time", width=90, anchor=tk.E)
 
         self.tree.tag_configure("has_unreported", foreground="#005fb8")
-        self.tree.tag_configure("all_reported", foreground="#666666")
+        self.tree.tag_configure("all_reported", foreground="#333333")
+        self.tree.tag_configure("unpaid", foreground="#a65100")
         self.tree.tag_configure("archived", foreground="#888888")
 
         scrollbar = ttk.Scrollbar(list_frame, orient=tk.VERTICAL, command=self.tree.yview)
@@ -95,14 +100,14 @@ class TaskPanel(ttk.LabelFrame):
         rename_btn = ttk.Button(btn_frame, text="Rename", command=self._on_rename_task)
         rename_btn.pack(side=tk.LEFT, padx=(0, 4), expand=True, fill=tk.X)
 
+        options_btn = ttk.Button(btn_frame, text="Options...", command=self._on_edit_options)
+        options_btn.pack(side=tk.LEFT, padx=(0, 4), expand=True, fill=tk.X)
+
         self.report_btn = ttk.Button(btn_frame, text="Report...", command=self._on_mark_reported_menu)
         self.report_btn.pack(side=tk.LEFT, padx=(0, 4), expand=True, fill=tk.X)
 
         self.archive_btn = ttk.Button(btn_frame, text="Archive", command=self._on_archive_toggle_clicked)
-        self.archive_btn.pack(side=tk.LEFT, padx=(0, 4), expand=True, fill=tk.X)
-
-        delete_btn = ttk.Button(btn_frame, text="Delete", command=self._on_delete_task)
-        delete_btn.pack(side=tk.RIGHT, expand=True, fill=tk.X)
+        self.archive_btn.pack(side=tk.LEFT, expand=True, fill=tk.X)
 
     def _register_events(self) -> None:
         self.engine.event_bus.subscribe(EventType.TASK_CREATED, self._on_task_created_event)
@@ -110,6 +115,7 @@ class TaskPanel(ttk.LabelFrame):
         self.engine.event_bus.subscribe(EventType.TASK_UNARCHIVED, self._on_task_unarchived_event)
         self.engine.event_bus.subscribe(EventType.TASK_DELETED, self._on_task_deleted_event)
         self.engine.event_bus.subscribe(EventType.TASK_RENAMED, self._on_task_renamed_event)
+        self.engine.event_bus.subscribe(EventType.TASK_UPDATED, self._on_task_renamed_event)
         self.engine.event_bus.subscribe(EventType.TASK_SELECTED, self._on_task_selected_event)
         self.engine.event_bus.subscribe(EventType.TASK_REPORTED, self._on_task_reported_event)
         self.engine.event_bus.subscribe(EventType.CLOCK_IN, self._on_clock_in_event)
@@ -119,18 +125,20 @@ class TaskPanel(ttk.LabelFrame):
         self.engine.event_bus.subscribe(EventType.STATE_LOADED, self._on_state_loaded_event)
 
     def _on_add_task(self) -> None:
-        name = ask_string(
-            "New Task",
-            "Enter task name:",
+        res = ask_task_options(
+            title="New Task",
+            initial_name="",
+            initial_is_unpaid=False,
             parent=self.winfo_toplevel(),
         )
-        if name is not None:
+        if res is not None:
+            name, is_unpaid = res
             clean_name = name.strip()
             if not clean_name:
                 messagebox.showwarning("Warning", "Task name cannot be empty.", parent=self.winfo_toplevel())
                 return
             try:
-                self.engine.create_task(clean_name)
+                self.engine.create_task(clean_name, is_unpaid=is_unpaid)
             except ValueError as e:
                 messagebox.showerror("Error", str(e), parent=self.winfo_toplevel())
 
@@ -143,8 +151,18 @@ class TaskPanel(ttk.LabelFrame):
                 return
         self.archive_btn.configure(text="Archive")
 
+    def _update_report_button_state(self) -> None:
+        selection = self.tree.selection()
+        if selection:
+            task = self.engine.get_task(selection[0])
+            if task and not task.is_unpaid:
+                self.report_btn.configure(state=tk.NORMAL)
+                return
+        self.report_btn.configure(state=tk.DISABLED)
+
     def _on_tree_select(self, event: tk.Event) -> None:
         self._update_archive_button_state()
+        self._update_report_button_state()
         if self._updating_selection:
             return
         selection = self.tree.selection()
@@ -210,6 +228,21 @@ class TaskPanel(ttk.LabelFrame):
             except Exception as e:
                 messagebox.showerror("Error", str(e), parent=self.winfo_toplevel())
 
+    def _on_edit_options(self, task_id: Optional[str] = None) -> None:
+        target_id = task_id
+        if not target_id:
+            selection = self.tree.selection()
+            if selection:
+                target_id = selection[0]
+            elif self.engine.state.active_task_id:
+                target_id = self.engine.state.active_task_id
+
+        EditClockInOutDialog(
+            parent=self.winfo_toplevel(),
+            engine=self.engine,
+            initial_task_id=target_id,
+        )
+
     def _on_mark_reported_menu(self) -> None:
         selection = self.tree.selection()
         if not selection:
@@ -218,6 +251,9 @@ class TaskPanel(ttk.LabelFrame):
         task_id = selection[0]
         task = self.engine.get_task(task_id)
         if not task:
+            return
+        if task.is_unpaid:
+            messagebox.showinfo("Unpaid Task", "Unpaid tasks do not track reported time.", parent=self.winfo_toplevel())
             return
 
         menu = tk.Menu(self, tearoff=0)
@@ -233,6 +269,9 @@ class TaskPanel(ttk.LabelFrame):
             menu.grab_release()
 
     def _mark_reported_now(self, task_id: str) -> None:
+        task = self.engine.get_task(task_id)
+        if not task or task.is_unpaid:
+            return
         try:
             self.engine.mark_task_reported(task_id)
         except Exception as e:
@@ -240,7 +279,7 @@ class TaskPanel(ttk.LabelFrame):
 
     def _mark_reported_custom(self, task_id: str) -> None:
         task = self.engine.get_task(task_id)
-        if not task:
+        if not task or task.is_unpaid:
             return
         initial = task.last_reported_at or iso_now()
         ts = ask_string(
@@ -266,6 +305,9 @@ class TaskPanel(ttk.LabelFrame):
                 messagebox.showerror("Error", str(e), parent=self.winfo_toplevel())
 
     def _clear_reported_status(self, task_id: str) -> None:
+        task = self.engine.get_task(task_id)
+        if not task or task.is_unpaid:
+            return
         try:
             self.engine.clear_task_reported(task_id)
         except Exception as e:
@@ -308,15 +350,20 @@ class TaskPanel(ttk.LabelFrame):
 
             tasks = self.engine.get_tasks(include_archived=self.show_archived_var.get())
             for task in tasks:
+                paid_icon = "💰" if not task.is_unpaid else ""
                 total_str = format_duration(task.total_duration_seconds)
                 unrep_dur = self.engine.get_task_unreported_duration(task.id, include_running=True)
                 unrep_str = format_duration(unrep_dur)
-                display_name = f"{task.name} [Archived]" if task.is_archived else task.name
+                archived_badge = " [Archived]" if task.is_archived else ""
+                unpaid_badge = " [Unpaid]" if task.is_unpaid else ""
+                display_name = f"{task.name}{archived_badge}{unpaid_badge}"
                 if task.is_archived:
                     tag = "archived"
+                elif task.is_unpaid:
+                    tag = "unpaid"
                 else:
                     tag = "has_unreported" if unrep_dur > 0.0 else "all_reported"
-                self.tree.insert("", tk.END, iid=task.id, values=(display_name, total_str, unrep_str), tags=(tag,))
+                self.tree.insert("", tk.END, iid=task.id, values=(paid_icon, display_name, total_str, unrep_str), tags=(tag,))
 
             active_id = self.engine.state.active_task_id
             if active_id and self.tree.exists(active_id):
@@ -325,6 +372,7 @@ class TaskPanel(ttk.LabelFrame):
         finally:
             self._updating_selection = False
         self._update_archive_button_state()
+        self._update_report_button_state()
         self._update_summary()
 
     def update_task_duration(self, task_id: str, duration_seconds: float) -> None:
@@ -337,6 +385,8 @@ class TaskPanel(ttk.LabelFrame):
                 self.tree.set(task_id, "unreported_time", format_duration(unrep_dur))
                 if task.is_archived:
                     tag = "archived"
+                elif task.is_unpaid:
+                    tag = "unpaid"
                 else:
                     tag = "has_unreported" if unrep_dur > 0.0 else "all_reported"
                 self.tree.item(task_id, tags=(tag,))
@@ -366,6 +416,8 @@ class TaskPanel(ttk.LabelFrame):
                 self.tree.focus(task.id)
             finally:
                 self._updating_selection = False
+            self._update_archive_button_state()
+            self._update_report_button_state()
 
     def _on_task_reported_event(self, event: Event) -> None:
         self.refresh_task_list()
@@ -374,9 +426,15 @@ class TaskPanel(ttk.LabelFrame):
         data = event.data or {}
         task_id = data.get("task_id")
         if task_id and self.tree.exists(task_id):
+            task = self.engine.get_task(task_id)
             unrep_dur = self.engine.get_task_unreported_duration(task_id, include_running=True)
             self.tree.set(task_id, "unreported_time", format_duration(unrep_dur))
-            tag = "has_unreported" if unrep_dur > 0.0 else "all_reported"
+            if task and task.is_archived:
+                tag = "archived"
+            elif task and task.is_unpaid:
+                tag = "unpaid"
+            else:
+                tag = "has_unreported" if unrep_dur > 0.0 else "all_reported"
             self.tree.item(task_id, tags=(tag,))
             self._update_summary()
 
@@ -393,11 +451,17 @@ class TaskPanel(ttk.LabelFrame):
         active_id = data.get("active_task_id")
         if not active_id or not self.tree.exists(active_id):
             return
+        task = self.engine.get_task(active_id)
         total_sec = data.get("total_duration", 0.0)
         unrep_sec = data.get("unreported_duration", 0.0)
         self.tree.set(active_id, "total_time", format_duration(total_sec))
         self.tree.set(active_id, "unreported_time", format_duration(unrep_sec))
-        tag = "has_unreported" if unrep_sec > 0.0 else "all_reported"
+        if task and task.is_archived:
+            tag = "archived"
+        elif task and task.is_unpaid:
+            tag = "unpaid"
+        else:
+            tag = "has_unreported" if unrep_sec > 0.0 else "all_reported"
         self.tree.item(active_id, tags=(tag,))
         self._update_summary()
 

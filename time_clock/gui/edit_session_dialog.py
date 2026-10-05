@@ -26,9 +26,9 @@ class EditClockInOutDialog(tk.Toplevel):
         self._entry_map: Dict[str, TimeEntry] = {}
         self._selected_entry_id: Optional[str] = None
 
-        self.title("Edit Task Clock In/Out")
-        self.geometry("640x620")
-        self.minsize(580, 520)
+        self.title("Edit Task")
+        self.geometry("680x680")
+        self.minsize(600, 560)
 
         self.grab_set()
 
@@ -43,8 +43,8 @@ class EditClockInOutDialog(tk.Toplevel):
         # Center on parent window
         self.update_idletasks()
         try:
-            w = 640
-            h = 620
+            w = 900
+            h = 680
             parent_top = parent.winfo_toplevel() if parent is not None else None
             if parent_top is not None and parent_top.winfo_ismapped():
                 parent_top.update_idletasks()
@@ -69,15 +69,53 @@ class EditClockInOutDialog(tk.Toplevel):
         main_frame = ttk.Frame(self, padding=12)
         main_frame.pack(fill=tk.BOTH, expand=True)
 
-        # 1. Task Selector Header
-        task_frame = ttk.LabelFrame(main_frame, text="Task", padding=8)
+        # 1. Task Selector & Options Section
+        task_frame = ttk.LabelFrame(main_frame, text="Task Details & Options", padding=8)
         task_frame.pack(fill=tk.X, pady=(0, 10))
 
-        ttk.Label(task_frame, text="Select Task:").pack(side=tk.LEFT, padx=(0, 8))
+        sel_row = ttk.Frame(task_frame)
+        sel_row.pack(fill=tk.X, pady=(0, 6))
+
+        ttk.Label(sel_row, text="Select Task:").pack(side=tk.LEFT, padx=(0, 8))
         self.task_var = tk.StringVar()
-        self.task_cb = ttk.Combobox(task_frame, textvariable=self.task_var, state="readonly", width=40)
+        self.task_cb = ttk.Combobox(sel_row, textvariable=self.task_var, state="readonly", width=40)
         self.task_cb.pack(side=tk.LEFT, fill=tk.X, expand=True)
         self.task_cb.bind("<<ComboboxSelected>>", self._on_task_selected)
+
+        name_row = ttk.Frame(task_frame)
+        name_row.pack(fill=tk.X, pady=(2, 6))
+
+        ttk.Label(name_row, text="Task Name:").pack(side=tk.LEFT, padx=(0, 6))
+        self.task_name_var = tk.StringVar()
+        self.task_name_entry = ttk.Entry(name_row, textvariable=self.task_name_var)
+        self.task_name_entry.pack(side=tk.LEFT, fill=tk.X, expand=True)
+
+        opts_row = ttk.Frame(task_frame)
+        opts_row.pack(fill=tk.X, pady=(2, 2))
+
+        self.is_unpaid_var = tk.BooleanVar(value=False)
+        self.paid_radio = ttk.Radiobutton(
+            opts_row,
+            text="Paid (Reportable)",
+            value=False,
+            variable=self.is_unpaid_var,
+        )
+        self.paid_radio.pack(side=tk.LEFT, padx=(0, 6))
+
+        self.unpaid_radio = ttk.Radiobutton(
+            opts_row,
+            text="Unpaid (Non-reportable)",
+            value=True,
+            variable=self.is_unpaid_var,
+        )
+        self.unpaid_radio.pack(side=tk.LEFT, padx=(0, 10))
+
+        self.save_options_btn = ttk.Button(
+            opts_row,
+            text="Save Options",
+            command=self._on_save_task_options,
+        )
+        self.save_options_btn.pack(side=tk.LEFT)
 
         # 2. Active Session Section
         self.active_frame = ttk.LabelFrame(main_frame, text="Active Running Session", padding=8)
@@ -190,12 +228,24 @@ class EditClockInOutDialog(tk.Toplevel):
         self.engine.event_bus.subscribe(EventType.ENTRY_UPDATED, self._on_entry_updated_event)
         self.engine.event_bus.subscribe(EventType.CLOCK_IN, self._on_engine_state_event)
         self.engine.event_bus.subscribe(EventType.CLOCK_OUT, self._on_engine_state_event)
+        self.engine.event_bus.subscribe(EventType.TASK_RENAMED, self._on_tasks_changed_event)
+        self.engine.event_bus.subscribe(EventType.TASK_UPDATED, self._on_tasks_changed_event)
+        self.engine.event_bus.subscribe(EventType.TASK_CREATED, self._on_tasks_changed_event)
+        self.engine.event_bus.subscribe(EventType.TASK_DELETED, self._on_tasks_changed_event)
+        self.engine.event_bus.subscribe(EventType.TASK_ARCHIVED, self._on_tasks_changed_event)
+        self.engine.event_bus.subscribe(EventType.TASK_UNARCHIVED, self._on_tasks_changed_event)
 
     def _unregister_events(self) -> None:
         try:
             self.engine.event_bus.unsubscribe(EventType.ENTRY_UPDATED, self._on_entry_updated_event)
             self.engine.event_bus.unsubscribe(EventType.CLOCK_IN, self._on_engine_state_event)
             self.engine.event_bus.unsubscribe(EventType.CLOCK_OUT, self._on_engine_state_event)
+            self.engine.event_bus.unsubscribe(EventType.TASK_RENAMED, self._on_tasks_changed_event)
+            self.engine.event_bus.unsubscribe(EventType.TASK_UPDATED, self._on_tasks_changed_event)
+            self.engine.event_bus.unsubscribe(EventType.TASK_CREATED, self._on_tasks_changed_event)
+            self.engine.event_bus.unsubscribe(EventType.TASK_DELETED, self._on_tasks_changed_event)
+            self.engine.event_bus.unsubscribe(EventType.TASK_ARCHIVED, self._on_tasks_changed_event)
+            self.engine.event_bus.unsubscribe(EventType.TASK_UNARCHIVED, self._on_tasks_changed_event)
         except Exception:
             pass
 
@@ -207,6 +257,10 @@ class EditClockInOutDialog(tk.Toplevel):
         self._unregister_events()
         super().destroy()
 
+    def _on_tasks_changed_event(self, event: Event) -> None:
+        self._populate_tasks()
+        self._load_task_data()
+
     def _populate_tasks(self) -> None:
         tasks = self.engine.get_tasks(include_archived=True)
         self._task_options: List[tuple[str, str]] = []
@@ -214,7 +268,8 @@ class EditClockInOutDialog(tk.Toplevel):
 
         for task in tasks:
             archived_tag = " [Archived]" if task.is_archived else ""
-            display_text = f"{task.name}{archived_tag}"
+            unpaid_tag = " [Unpaid]" if task.is_unpaid else ""
+            display_text = f"{task.name}{archived_tag}{unpaid_tag}"
             self._task_options.append((task.id, display_text))
             combobox_values.append(display_text)
 
@@ -251,6 +306,10 @@ class EditClockInOutDialog(tk.Toplevel):
             return
 
         try:
+            # 0. Task Options State
+            self.task_name_var.set(task.name)
+            self.is_unpaid_var.set(task.is_unpaid)
+
             # 1. Active Session State
             is_active_and_running = (
                 self.engine.state.is_running
@@ -305,6 +364,32 @@ class EditClockInOutDialog(tk.Toplevel):
             self._selected_entry_id = entry.id
             self.entry_start_var.set(entry.start_time.split(".")[0].replace("T", " "))
             self.entry_end_var.set((entry.end_time or "").split(".")[0].replace("T", " "))
+
+    def _on_save_task_options(self) -> None:
+        if not self.selected_task_id:
+            messagebox.showinfo("Select Task", "Please select a task first.", parent=self)
+            return
+
+        raw_name = self.task_name_var.get()
+        clean_name = raw_name.strip()
+        if not clean_name:
+            messagebox.showwarning("Warning", "Task name cannot be empty.", parent=self)
+            return
+
+        is_unpaid = bool(self.is_unpaid_var.get())
+        try:
+            self.engine.update_task_options(
+                self.selected_task_id,
+                name=clean_name,
+                is_unpaid=is_unpaid,
+            )
+            messagebox.showinfo(
+                "Success",
+                "Task options updated successfully.",
+                parent=self,
+            )
+        except Exception as e:
+            messagebox.showerror("Error", str(e), parent=self)
 
     def _parse_timestamp(self, ts_str: str, label: str) -> str:
         clean = ts_str.strip()

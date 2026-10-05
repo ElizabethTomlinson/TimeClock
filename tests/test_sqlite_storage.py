@@ -373,6 +373,56 @@ class TestSQLiteStorage(unittest.TestCase):
         self.assertTrue(reloaded.tasks["t_old2"].is_archived)
         storage.close()
 
+    def test_sqlite_migration_adds_is_unpaid_column(self):
+        # Create an old schema database without is_unpaid column
+        legacy_db = self.test_dir / "old_schema_no_unpaid.db"
+        with sqlite3.connect(legacy_db) as conn:
+            conn.execute("""
+                CREATE TABLE tasks (
+                    id TEXT PRIMARY KEY,
+                    name TEXT NOT NULL,
+                    created_at TEXT NOT NULL,
+                    last_reported_at TEXT,
+                    is_archived INTEGER NOT NULL DEFAULT 0
+                );
+            """)
+            conn.execute("""
+                CREATE TABLE time_entries (
+                    id TEXT PRIMARY KEY,
+                    task_id TEXT NOT NULL,
+                    start_time TEXT NOT NULL,
+                    end_time TEXT,
+                    duration_seconds REAL NOT NULL DEFAULT 0.0,
+                    FOREIGN KEY (task_id) REFERENCES tasks(id) ON DELETE CASCADE
+                );
+            """)
+            conn.execute("""
+                CREATE TABLE app_state (
+                    key TEXT PRIMARY KEY,
+                    active_task_id TEXT,
+                    is_running INTEGER NOT NULL DEFAULT 0,
+                    current_session_start TEXT,
+                    FOREIGN KEY (active_task_id) REFERENCES tasks(id) ON DELETE SET NULL
+                );
+            """)
+            conn.execute("INSERT INTO tasks (id, name, created_at, is_archived) VALUES ('t_old3', 'Old Task 3', '2026-09-01T00:00:00', 0);")
+            conn.commit()
+
+        # Open with SQLiteStorage which triggers column migration
+        storage = SQLiteStorage(db_path=legacy_db)
+        loaded = storage.load()
+        self.assertIn("t_old3", loaded.tasks)
+        self.assertEqual(loaded.tasks["t_old3"].name, "Old Task 3")
+        self.assertFalse(loaded.tasks["t_old3"].is_unpaid)
+
+        # Update is_unpaid and save
+        loaded.tasks["t_old3"].is_unpaid = True
+        storage.save(loaded)
+
+        reloaded = storage.load()
+        self.assertTrue(reloaded.tasks["t_old3"].is_unpaid)
+        storage.close()
+
     def test_save_and_reload_updated_time_entries(self):
         task = Task(
             id="t1",

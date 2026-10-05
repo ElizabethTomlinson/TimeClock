@@ -119,6 +119,7 @@ class HistoryPanel(ttk.LabelFrame):
         self.engine.event_bus.subscribe(EventType.TASK_SELECTED, self._on_task_selected_event)
         self.engine.event_bus.subscribe(EventType.TASK_DELETED, self._on_task_deleted_event)
         self.engine.event_bus.subscribe(EventType.TASK_RENAMED, self._on_task_renamed_event)
+        self.engine.event_bus.subscribe(EventType.TASK_UPDATED, self._on_task_renamed_event)
         self.engine.event_bus.subscribe(EventType.TASK_REPORTED, self._on_task_reported_event)
         self.engine.event_bus.subscribe(EventType.ENTRY_UPDATED, self._on_entry_updated_event)
         self.engine.event_bus.subscribe(EventType.STATE_LOADED, self._on_state_loaded_event)
@@ -134,7 +135,8 @@ class HistoryPanel(ttk.LabelFrame):
             self.summary_var.set("Sessions: 0 | Total: 00:00:00 | Unreported: 00:00:00")
             return
 
-        self.configure(text=f"Session History - {active_task.name}")
+        unpaid_suffix = " [Unpaid]" if active_task.is_unpaid else ""
+        self.configure(text=f"Session History - {active_task.name}{unpaid_suffix}")
         entries = active_task.entries
 
         cutoff_dt = parse_iso(active_task.last_reported_at) if active_task.last_reported_at else None
@@ -155,8 +157,11 @@ class HistoryPanel(ttk.LabelFrame):
             self.tree.insert("", tk.END, values=(idx, start_str, end_str, dur_str), tags=(tag,))
 
         total_str = format_duration(active_task.total_duration_seconds)
-        unrep_str = format_duration(active_task.calculate_unreported_duration())
-        self.summary_var.set(f"Sessions: {len(entries)} | Total: {total_str} | Unreported: {unrep_str}")
+        if active_task.is_unpaid:
+            self.summary_var.set(f"Sessions: {len(entries)} | Total: {total_str} | Unreported: 00:00:00 (Unpaid)")
+        else:
+            unrep_str = format_duration(active_task.calculate_unreported_duration())
+            self.summary_var.set(f"Sessions: {len(entries)} | Total: {total_str} | Unreported: {unrep_str}")
 
     def _on_task_created_event(self, event: Event) -> None:
         self.refresh_history()

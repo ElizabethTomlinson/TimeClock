@@ -39,14 +39,14 @@ class TimeClockEngine:
         self.storage.save(self.state)
         self.event_bus.emit(EventType.STATE_SAVED, self.state)
 
-    def create_task(self, name: str) -> Task:
+    def create_task(self, name: str, is_unpaid: bool = False) -> Task:
         """Create a new task with a unique name and add it to the state."""
         clean_name = name.strip()
         if not clean_name:
             raise ValueError("Task name cannot be empty.")
 
         task_id = f"task_{uuid.uuid4().hex[:8]}"
-        task = Task(id=task_id, name=clean_name, created_at=iso_now())
+        task = Task(id=task_id, name=clean_name, created_at=iso_now(), is_unpaid=is_unpaid)
         self.state.tasks[task_id] = task
 
         if self.state.active_task_id is None:
@@ -124,16 +124,30 @@ class TimeClockEngine:
 
     def rename_task(self, task_id: str, new_name: str) -> Task:
         """Rename an existing task."""
+        return self.update_task_options(task_id, name=new_name)
+
+    def update_task_options(
+        self,
+        task_id: str,
+        name: Optional[str] = None,
+        is_unpaid: Optional[bool] = None,
+    ) -> Task:
+        """Update task name and/or paid/unpaid status."""
         if task_id not in self.state.tasks:
             raise KeyError(f"Task with id '{task_id}' not found.")
 
-        clean_name = new_name.strip()
-        if not clean_name:
-            raise ValueError("Task name cannot be empty.")
-
         task = self.state.tasks[task_id]
-        task.name = clean_name
+        if name is not None:
+            clean_name = name.strip()
+            if not clean_name:
+                raise ValueError("Task name cannot be empty.")
+            task.name = clean_name
+
+        if is_unpaid is not None:
+            task.is_unpaid = bool(is_unpaid)
+
         self._save_state()
+        self.event_bus.emit(EventType.TASK_UPDATED, task)
         self.event_bus.emit(EventType.TASK_RENAMED, task)
         return task
 
@@ -165,6 +179,9 @@ class TimeClockEngine:
             return 0.0
 
         task = self.state.tasks[task_id]
+        if task.is_unpaid:
+            return 0.0
+
         unreported = task.calculate_unreported_duration()
 
         if (

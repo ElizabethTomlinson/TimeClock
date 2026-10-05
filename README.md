@@ -35,13 +35,15 @@ The Time Clock window is organized into three intuitive areas:
 
 ```
 +------------------------------------------------------------------------+
-|  Top Menu: File | Advanced (Edit Task Clock In/Out...)                 |
+|  Top Menu: File | Advanced (Edit Task..., Delete Task...)              |
 +------------------------------------+-----------------------------------+
 |  Tasks Panel (Left)                |  Clock Tracker (Top Right)        |
-|  - Add new tasks                   |  - Active task status & timer     |
-|  - Select, rename, archive, delete |  - All Tasks Summary: Day/Week/Mo |
-|  - Show/hide archived tasks        |  - Clock In / Clock Out button    |
-|  - View total & unreported times   |  - Mark Reported button           |
+|  - Add new tasks (Paid / Unpaid)   |  - Active task status & timer     |
+|  - 💰 Paid status indicator column |  - All Tasks Summary: Day/Week/Mo |
+|  - Select, rename, archive tasks   |  - Clock In / Clock Out button    |
+|  - Unified Edit Task dialog        |  - Mark Reported button           |
+|  - Show/hide archived tasks        |                                   |
+|  - View total & unreported times   |                                   |
 |                                    +-----------------------------------+
 |                                    |  Session History (Bottom Right)   |
 |                                    |  - Detailed session timestamps    |
@@ -51,8 +53,8 @@ The Time Clock window is organized into three intuitive areas:
 ```
 
 - **File Menu (Top Bar)**: Access global data export (CSV/JSON) and application exit.
-- **Advanced Menu (Top Bar)**: Access the **Edit Task Clock In/Out...** dialog to adjust active or historical timestamps.
-- **Tasks Panel (Left Side)**: Manage your list of projects or tasks and switch between them.
+- **Advanced Menu (Top Bar)**: Access tools to open the unified task editing dialog (**Edit Task...**) or permanently delete a selected task (**Delete Task...**).
+- **Tasks Panel (Left Side)**: Manage your list of projects or tasks, view the `💰` paid status column, configure options, and switch between them.
 - **Clock Tracker (Top Right)**: Control your live timer and see current session progress.
 - **Session History (Bottom Right)**: Review logged work sessions for the selected task.
 
@@ -62,15 +64,25 @@ The Time Clock window is organized into three intuitive areas:
 
 The **Tasks** panel on the left allows you to organize your work into discrete tasks or projects.
 
+### Paid vs. Unpaid Tasks
+Tasks in Time Clock can be designated as either **Paid** (default) or **Unpaid**:
+- **Paid (Reportable)**: Billable or client-facing tasks that accumulate unreported time as you work. Unreported time is tracked toward reporting milestones and highlighted when pending.
+- **Unpaid (Non-reportable)**: Internal, non-billable, or administrative activities (e.g., internal meetings, breaks, learning). Unpaid tasks track total elapsed duration normally (contributing to task total time and Day, Week, and Month summaries) but always show `00:00:00` for Unreported Time and never appear as pending unreported work.
+- **Visual Badges & Color Coding**: Unpaid tasks are clearly labeled with an `[Unpaid]` badge across the task list, active timer header, session history, and dialog dropdowns, and are visually distinguished in warm amber text.
+- **Reporting Controls**: Because unpaid tasks do not accumulate reportable time, reporting actions (**Report...** in Tasks panel and **Mark Reported** in Clock Tracker) are automatically disabled when an unpaid task is selected.
+
 ### Task List & Unreported Time Indicators
-The task table displays your tasks alongside their **Total Time** and **Unreported Time**:
-- **Visual Status Highlighting**: Tasks containing pending unreported time (`> 00:00:00`) are prominently highlighted in blue text so you can immediately see which projects need to be billed or submitted. Fully reported tasks (`00:00:00` unreported) remain in neutral gray.
-- **Live Synchronization**: As you clock in, clock out, or track active work, the task's unreported time counter and highlight tag update automatically in real time.
-- **Aggregate Summary Indicator**: A footer summary below the task list displays the total number of projects with outstanding work and cumulative pending duration (e.g., `Unreported: 2 projects (04:15:00)`), allowing you to assess your pending reporting workload at a glance.
+The task table displays your tasks with a paid indicator column alongside their **Total Time** and **Unreported Time**:
+- **Paid Indicator Column (`💰`)**: A dedicated column on the left displays a money emoji (`💰`) for paid tasks and remains blank for unpaid tasks, allowing you to instantly identify billable projects at a glance.
+- **Visual Status Highlighting**: Paid tasks containing pending unreported time (`> 00:00:00`) are prominently highlighted in blue text so you can immediately see which projects need to be billed or submitted. Fully reported paid tasks appear in neutral dark text, unpaid tasks appear in distinct warm amber text, and archived tasks appear in muted gray.
+- **Live Synchronization**: As you clock in, clock out, or track active work, the task's unreported time counter, paid indicator, and highlight tag update automatically in real time.
+- **Aggregate Summary Indicator**: A footer summary below the task list displays the total number of projects with outstanding work and cumulative pending duration (e.g., `Unreported: 2 projects (04:15:00)`), ignoring unpaid tasks so your pending billing summary stays accurate.
 
 ### Adding a Task
 1. Click the **New Task...** button at the top of the Tasks panel.
-2. Enter or paste the name of your task into the popup dialog (e.g., `Client Website Redesign`, `Bug Fixes`, `Admin & Emails`).
+2. In the modal dialog:
+   - Enter or paste the name of your task (e.g., `Client Website Redesign`, `Internal Sync`).
+   - Select the task type: **Paid (Reportable)** or **Unpaid (Non-reportable)**.
 3. Click **OK** or press **Enter / Return** on your keyboard.
 4. Your new task appears in the task list below and is automatically selected.
 
@@ -78,7 +90,21 @@ The task table displays your tasks alongside their **Total Time** and **Unreport
 - Click on any task in the list to select it.
 - Once selected, the **Clock Tracker** and **Session History** panels automatically update to show details for that task.
 
+### Editing Task Options and Sessions (Unified Dialog)
+You can change a task's name, toggle its paid/unpaid status, adjust active running timers, and edit past session records in a single unified dialog:
+1. Click on the task in the list to select it.
+2. Click the **Options...** button below the task list (or choose **Advanced -> Edit Task...** from the top menu bar).
+3. In the unified dialog:
+   - **Task Details & Options**:
+     - Choose a task from the **Select Task** dropdown.
+     - View and edit the full task name in the dedicated full-width **Task Name** field, providing ample space for long task names.
+     - Toggle between **Paid (Reportable)** and **Unpaid (Non-reportable)** status, then click **Save Options**.
+   - **Active Running Session**: If the task is running, edit the start timestamp and click **Apply Start Time**.
+   - **Completed Sessions**: Select any historical session to modify start/end timestamps via **Save Changes**, or insert a missed session using **Add as New**.
+4. The task list, timer panel, and session views will instantly update to reflect your changes.
+
 ### Renaming a Task
+You can quickly rename a task directly:
 1. Click on the task you wish to rename to highlight it.
 2. Click the **Rename** button below the task list.
 3. Enter the new name in the popup dialog and confirm.
@@ -102,8 +128,8 @@ Archiving allows you to keep your active task list organized and focused without
   4. Click **Unarchive** to restore the task to the active list.
 
 ### Deleting a Task
-1. Click the task you want to remove.
-2. Click the **Delete** button below the task list.
+1. Click the task in the list that you wish to remove.
+2. In the top application menu bar, click **Advanced** and select **Delete Task...**.
 3. A confirmation dialog will ask if you are sure you want to delete the task and all of its recorded sessions.
 4. Confirm to permanently remove the task.
 
@@ -146,11 +172,13 @@ If you forget to clock in on time, forget to clock out, or need to correct past 
 
 ### Opening the Edit Dialog
 1. In the top application menu bar, click **Advanced**.
-2. Select **Edit Task Clock In/Out...**.
+2. Select **Edit Task...**.
 3. A modal dialog will appear centered over the application window.
 
-### Selecting a Task
+### Selecting a Task and Editing Details
 - Use the **Select Task** dropdown at the top to choose the task you wish to inspect or edit. It defaults to your currently selected task and includes any archived tasks.
+- The **Task Name** is displayed on its own wide input line across the dialog width, making it convenient to read and edit long task names.
+- Adjust the **Paid (Reportable)** or **Unpaid (Non-reportable)** classification and click **Save Options** to update task attributes.
 
 ### Adjusting an Active Session Start Time
 If the selected task is currently clocked in:
@@ -241,7 +269,7 @@ To export history for only the currently selected task:
 1. Select the desired task from the Tasks list.
 2. In the **Session History** panel, click the **Export...** button in the bottom left corner.
 3. Choose your preferred file format:
-   - **CSV (`.csv`)**: Ideal for spreadsheets. Includes task details, archive status, start time, end time, and duration in seconds.
+   - **CSV (`.csv`)**: Ideal for spreadsheets. Includes task details, archive status, paid/unpaid (`is_unpaid`) status, start time, end time, and duration in seconds.
    - **JSON (`.json`)**: Ideal for technical workflows or importing into other tools.
 4. Choose where to save the file and click **Save**.
 
@@ -249,7 +277,7 @@ To export history for only the currently selected task:
 To export all tasks (including active and archived projects) and all session records across the entire application at once:
 1. Click the **File** menu in the top menu bar.
 2. Select either:
-   - **Export Data as CSV...**: Saves a comprehensive spreadsheet containing every task (with `is_archived` status) and its complete session history.
+   - **Export Data as CSV...**: Saves a comprehensive spreadsheet containing every task (with `is_archived` and `is_unpaid` status) and its complete session history.
    - **Export Data as JSON...**: Saves the complete application database in JSON format.
 3. Select your destination folder and file name, then click **Save**.
 

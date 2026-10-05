@@ -128,12 +128,46 @@ class TestExport(unittest.TestCase):
             reader = list(csv.DictReader(f))
         self.assertEqual(len(reader), 1)
         self.assertEqual(reader[0]["is_archived"], "true")
+        self.assertEqual(reader[0]["is_unpaid"], "false")
 
         json_path = self.test_dir / "archived.json"
         export_to_json(archived_state, json_path)
         with open(json_path, "r", encoding="utf-8") as f:
             data = json.load(f)
         self.assertTrue(data["tasks"]["t_arch"]["is_archived"])
+        self.assertFalse(data["tasks"]["t_arch"]["is_unpaid"])
+
+    def test_export_includes_is_unpaid_flag(self):
+        unpaid_state = AppState(
+            tasks={
+                "t_unpaid": Task(
+                    id="t_unpaid",
+                    name="Internal Meeting",
+                    created_at="2026-08-01T10:00:00",
+                    is_unpaid=True,
+                    entries=[
+                        TimeEntry(
+                            id="e_unpaid_1",
+                            start_time="2026-08-01T10:00:00",
+                            end_time="2026-08-01T11:00:00",
+                            duration_seconds=3600.0,
+                        )
+                    ],
+                )
+            }
+        )
+        csv_path = self.test_dir / "unpaid.csv"
+        export_to_csv(unpaid_state, csv_path)
+        with open(csv_path, "r", encoding="utf-8") as f:
+            reader = list(csv.DictReader(f))
+        self.assertEqual(len(reader), 1)
+        self.assertEqual(reader[0]["is_unpaid"], "true")
+
+        json_path = self.test_dir / "unpaid.json"
+        export_to_json(unpaid_state, json_path)
+        with open(json_path, "r", encoding="utf-8") as f:
+            data = json.load(f)
+        self.assertTrue(data["tasks"]["t_unpaid"]["is_unpaid"])
 
     def test_export_to_json_full(self):
         target_path = self.test_dir / "exports" / "all_data.json"

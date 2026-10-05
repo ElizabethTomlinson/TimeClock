@@ -553,6 +553,63 @@ class TestTimeClockEngine(unittest.TestCase):
         self.assertEqual(len(reloaded.tasks[task.id].entries), 1)
         self.assertEqual(reloaded.tasks[task.id].entries[0].duration_seconds, 5400.0)
 
+    def test_create_and_update_unpaid_task(self):
+        events = []
+        self.bus.subscribe(EventType.TASK_CREATED, lambda e: events.append(e))
+        self.bus.subscribe(EventType.TASK_UPDATED, lambda e: events.append(e))
+
+        # 1. Create unpaid task
+        unpaid_task = self.engine.create_task("Internal Admin", is_unpaid=True)
+        self.assertTrue(unpaid_task.is_unpaid)
+        self.assertEqual(len(events), 1)
+
+        # Verify persisted
+        reloaded = self.storage.load()
+        self.assertTrue(reloaded.tasks[unpaid_task.id].is_unpaid)
+
+        # 2. Update task options (change name and paid status)
+        updated = self.engine.update_task_options(
+            unpaid_task.id, name="Internal Admin Renamed", is_unpaid=False
+        )
+        self.assertEqual(updated.name, "Internal Admin Renamed")
+        self.assertFalse(updated.is_unpaid)
+        self.assertGreaterEqual(len(events), 2)
+
+        # Verify persisted change
+        reloaded2 = self.storage.load()
+        self.assertEqual(reloaded2.tasks[unpaid_task.id].name, "Internal Admin Renamed")
+        self.assertFalse(reloaded2.tasks[unpaid_task.id].is_unpaid)
+
+    def test_unpaid_task_excluded_from_unreported_time(self):
+        paid_task = self.engine.create_task("Client Work", is_unpaid=False)
+        unpaid_task = self.engine.create_task("Open Source", is_unpaid=True)
+
+        self.engine.add_manual_time_entry(paid_task.id, "2026-10-01T09:00:00", "2026-10-01T10:00:00")
+        self.engine.add_manual_time_entry(unpaid_task.id, "2026-10-01T10:00:00", "2026-10-01T12:00:00")
+
+        self.assertEqual(self.engine.get_task_unreported_duration(paid_task.id), 3600.0)
+        self.assertEqual(self.engine.get_task_unreported_duration(unpaid_task.id), 0.0)
+        self.assertFalse(self.engine.has_unreported_time(unpaid_task.id))
+        self.assertTrue(self.engine.has_unreported_time(paid_task.id))
+
+        unreported_tasks = self.engine.get_unreported_tasks()
+        self.assertEqual(len(unreported_tasks), 1)
+        self.assertEqual(unreported_tasks[0].id, paid_task.id)
+        self.assertEqual(self.engine.get_unreported_tasks_count(), 1)
+        self.assertEqual(self.engine.get_total_unreported_duration(), 3600.0)
+
+        # Check running active session on unpaid task
+        self.engine.select_task(unpaid_task.id)
+        self.engine.clock_in()
+        self.assertEqual(self.engine.get_task_unreported_duration(unpaid_task.id, include_running=True), 0.0)
+        self.assertEqual(self.engine.get_total_unreported_duration(include_running=True), 3600.0)
+
+        # Check get_period_durations includes both paid and unpaid
+        period_durations = self.engine.get_period_durations(
+            as_of=datetime.fromisoformat("2026-10-01T23:59:59"), include_running=False
+        )
+        self.assertEqual(period_durations["day"], 10800.0)  # 3600 + 7200
+
 
 if __name__ == "__main__":
     unittest.main()

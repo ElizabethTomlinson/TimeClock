@@ -158,6 +158,7 @@ class ClockPanel(ttk.LabelFrame):
         self.engine.event_bus.subscribe(EventType.TASK_SELECTED, self._on_task_selected_event)
         self.engine.event_bus.subscribe(EventType.TASK_DELETED, self._on_task_deleted_event)
         self.engine.event_bus.subscribe(EventType.TASK_RENAMED, self._on_task_renamed_event)
+        self.engine.event_bus.subscribe(EventType.TASK_UPDATED, self._on_task_renamed_event)
         self.engine.event_bus.subscribe(EventType.TASK_REPORTED, self._on_task_reported_event)
         self.engine.event_bus.subscribe(EventType.ENTRY_UPDATED, self._on_entry_updated_event)
         self.engine.event_bus.subscribe(EventType.TICK, self._on_tick_event)
@@ -181,6 +182,9 @@ class ClockPanel(ttk.LabelFrame):
         if not active_task:
             messagebox.showinfo("Select Task", "Please select or create a task first.")
             return
+        if active_task.is_unpaid:
+            messagebox.showinfo("Unpaid Task", "Unpaid tasks do not track reported time.")
+            return
 
         menu = tk.Menu(self, tearoff=0)
         menu.add_command(label="Mark as Reported Now", command=self._mark_reported_now)
@@ -196,7 +200,7 @@ class ClockPanel(ttk.LabelFrame):
 
     def _mark_reported_now(self) -> None:
         active_task = self.engine.get_active_task()
-        if active_task:
+        if active_task and not active_task.is_unpaid:
             try:
                 self.engine.mark_task_reported(active_task.id)
             except Exception as e:
@@ -204,7 +208,7 @@ class ClockPanel(ttk.LabelFrame):
 
     def _mark_reported_custom(self) -> None:
         active_task = self.engine.get_active_task()
-        if not active_task:
+        if not active_task or active_task.is_unpaid:
             return
 
         initial = active_task.last_reported_at or iso_now()
@@ -232,7 +236,7 @@ class ClockPanel(ttk.LabelFrame):
 
     def _clear_reported_status(self) -> None:
         active_task = self.engine.get_active_task()
-        if active_task:
+        if active_task and not active_task.is_unpaid:
             try:
                 self.engine.clear_task_reported(active_task.id)
             except Exception as e:
@@ -242,14 +246,20 @@ class ClockPanel(ttk.LabelFrame):
         """Update all labels and buttons based on current engine state."""
         active_task = self.engine.get_active_task()
         if active_task:
-            self.task_title_var.set(f"Active Task: {active_task.name}")
+            task_label_text = f"Active Task: {active_task.name} [Unpaid]" if active_task.is_unpaid else f"Active Task: {active_task.name}"
+            self.task_title_var.set(task_label_text)
             self.toggle_btn.configure(state=tk.NORMAL)
-            self.report_btn.configure(state=tk.NORMAL)
+            if active_task.is_unpaid:
+                self.report_btn.configure(state=tk.DISABLED)
+            else:
+                self.report_btn.configure(state=tk.NORMAL)
             total_duration = active_task.total_duration_seconds
             unreported_duration = self.engine.get_task_unreported_duration(
                 active_task.id, include_running=self.engine.state.is_running
             )
-            if active_task.last_reported_at:
+            if active_task.is_unpaid:
+                self.last_reported_var.set("Last Reported: N/A (Unpaid Task)")
+            elif active_task.last_reported_at:
                 lr_display = active_task.last_reported_at.split(".")[0].replace("T", " ")
                 self.last_reported_var.set(f"Last Reported: {lr_display}")
             else:
@@ -270,14 +280,20 @@ class ClockPanel(ttk.LabelFrame):
             session_dur = self.engine.get_current_session_duration()
             self.timer_var.set(format_duration(session_dur))
             self.total_time_var.set(f"Total Time: {format_duration(total_duration + session_dur)}")
-            self.unreported_time_var.set(f"Unreported Time: {format_duration(unreported_duration)}")
+            if active_task and active_task.is_unpaid:
+                self.unreported_time_var.set("Unreported Time: 00:00:00 (Unpaid)")
+            else:
+                self.unreported_time_var.set(f"Unreported Time: {format_duration(unreported_duration)}")
         else:
             self.status_var.set("○ Idle (Clocked Out)")
             self.toggle_btn.configure(text="Clock In")
             self.start_time_var.set("Start Time: --")
             self.timer_var.set("00:00:00")
             self.total_time_var.set(f"Total Time: {format_duration(total_duration)}")
-            self.unreported_time_var.set(f"Unreported Time: {format_duration(unreported_duration)}")
+            if active_task and active_task.is_unpaid:
+                self.unreported_time_var.set("Unreported Time: 00:00:00 (Unpaid)")
+            else:
+                self.unreported_time_var.set(f"Unreported Time: {format_duration(unreported_duration)}")
 
         periods = self.engine.get_period_durations(include_running=self.engine.state.is_running)
         self.day_time_var.set(f"Day: {format_duration(periods['day'])}")
@@ -324,7 +340,12 @@ class ClockPanel(ttk.LabelFrame):
         if data.get("is_running"):
             self.timer_var.set(data.get("session_duration_formatted", "00:00:00"))
             self.total_time_var.set(f"Total Time: {data.get('total_duration_formatted', '00:00:00')}")
-            self.unreported_time_var.set(f"Unreported Time: {data.get('unreported_duration_formatted', '00:00:00')}")
+            active_task = self.engine.get_active_task()
+            if active_task and active_task.is_unpaid:
+                self.unreported_time_var.set("Unreported Time: 00:00:00 (Unpaid)")
+                self.last_reported_var.set("Last Reported: N/A (Unpaid Task)")
+            else:
+                self.unreported_time_var.set(f"Unreported Time: {data.get('unreported_duration_formatted', '00:00:00')}")
         if "day_duration_formatted" in data:
             self.day_time_var.set(f"Day: {data.get('day_duration_formatted', '00:00:00')}")
         if "week_duration_formatted" in data:

@@ -87,7 +87,8 @@ class SQLiteStorage(Storage):
                     name TEXT NOT NULL,
                     created_at TEXT NOT NULL,
                     last_reported_at TEXT,
-                    is_archived INTEGER NOT NULL DEFAULT 0
+                    is_archived INTEGER NOT NULL DEFAULT 0,
+                    is_unpaid INTEGER NOT NULL DEFAULT 0
                 );
             """)
             # Check for column migration on existing databases
@@ -97,6 +98,8 @@ class SQLiteStorage(Storage):
                 conn.execute("ALTER TABLE tasks ADD COLUMN last_reported_at TEXT;")
             if "is_archived" not in columns:
                 conn.execute("ALTER TABLE tasks ADD COLUMN is_archived INTEGER NOT NULL DEFAULT 0;")
+            if "is_unpaid" not in columns:
+                conn.execute("ALTER TABLE tasks ADD COLUMN is_unpaid INTEGER NOT NULL DEFAULT 0;")
 
             conn.execute("""
                 CREATE TABLE IF NOT EXISTS time_entries (
@@ -154,7 +157,7 @@ class SQLiteStorage(Storage):
         try:
             with self._connection() as conn:
                 tasks_cursor = conn.execute(
-                    "SELECT id, name, created_at, last_reported_at, is_archived FROM tasks ORDER BY created_at ASC;"
+                    "SELECT id, name, created_at, last_reported_at, is_archived, is_unpaid FROM tasks ORDER BY created_at ASC;"
                 )
                 tasks: Dict[str, Task] = {}
                 for row in tasks_cursor.fetchall():
@@ -164,6 +167,7 @@ class SQLiteStorage(Storage):
                         created_at=row["created_at"],
                         last_reported_at=row["last_reported_at"],
                         is_archived=bool(row["is_archived"]),
+                        is_unpaid=bool(row["is_unpaid"]),
                         entries=[],
                     )
 
@@ -228,15 +232,16 @@ class SQLiteStorage(Storage):
             for task in state.tasks.values():
                 conn.execute(
                     """
-                    INSERT INTO tasks (id, name, created_at, last_reported_at, is_archived)
-                    VALUES (?, ?, ?, ?, ?)
+                    INSERT INTO tasks (id, name, created_at, last_reported_at, is_archived, is_unpaid)
+                    VALUES (?, ?, ?, ?, ?, ?)
                     ON CONFLICT(id) DO UPDATE SET
                         name = excluded.name,
                         created_at = excluded.created_at,
                         last_reported_at = excluded.last_reported_at,
-                        is_archived = excluded.is_archived;
+                        is_archived = excluded.is_archived,
+                        is_unpaid = excluded.is_unpaid;
                     """,
-                    (task.id, task.name, task.created_at, task.last_reported_at, 1 if task.is_archived else 0),
+                    (task.id, task.name, task.created_at, task.last_reported_at, 1 if task.is_archived else 0, 1 if task.is_unpaid else 0),
                 )
 
                 # Sync entries for this task

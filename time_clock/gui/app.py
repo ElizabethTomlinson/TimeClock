@@ -86,8 +86,13 @@ class TimeClockApp:
 
         advanced_menu = tk.Menu(menubar, tearoff=False)
         advanced_menu.add_command(
-            label="Edit Task Clock In/Out...",
+            label="Edit Task...",
             command=self._open_edit_clock_in_out,
+            underline=0,
+        )
+        advanced_menu.add_command(
+            label="Delete Task...",
+            command=self._delete_task,
             underline=0,
         )
         menubar.add_cascade(label="Advanced", menu=advanced_menu, underline=0)
@@ -96,7 +101,24 @@ class TimeClockApp:
 
     def _open_edit_clock_in_out(self) -> None:
         """Open the modal dialog for editing clock in/out times and sessions."""
-        EditClockInOutDialog(parent=self.root, engine=self.engine)
+        active_id = None
+        if hasattr(self, "task_panel") and self.task_panel:
+            selection = self.task_panel.tree.selection()
+            if selection:
+                active_id = selection[0]
+            elif self.engine.state.active_task_id:
+                active_id = self.engine.state.active_task_id
+        EditClockInOutDialog(parent=self.root, engine=self.engine, initial_task_id=active_id)
+
+    def _edit_task_options(self) -> None:
+        """Prompt user to edit options (name, paid/unpaid status) for the selected or active task."""
+        if hasattr(self, "task_panel") and self.task_panel:
+            self.task_panel._on_edit_options()
+
+    def _delete_task(self) -> None:
+        """Prompt user to delete the currently selected task."""
+        if hasattr(self, "task_panel") and self.task_panel:
+            self.task_panel._on_delete_task()
 
     def _export_as_csv(self) -> None:
         """Prompt user for file location and export full tracking data as CSV."""

@@ -90,6 +90,41 @@ class TestModels(unittest.TestCase):
         restored_default = Task.from_dict({"id": "t2", "name": "Active", "created_at": "2026-09-01T08:00:00"})
         self.assertFalse(restored_default.is_archived)
 
+    def test_task_unpaid_serialization_and_defaults(self):
+        task = Task(
+            id="t-unpaid",
+            name="Unpaid Activity",
+            created_at="2026-09-01T08:00:00",
+            is_unpaid=True,
+        )
+        data = task.to_dict()
+        self.assertTrue(data.get("is_unpaid"))
+        restored = Task.from_dict(data)
+        self.assertTrue(restored.is_unpaid)
+
+        # Default is_unpaid is False when missing or default
+        restored_default = Task.from_dict({"id": "t2", "name": "Paid Work", "created_at": "2026-09-01T08:00:00"})
+        self.assertFalse(restored_default.is_unpaid)
+        task_default = Task(id="t3", name="Default Task", created_at="2026-09-01T08:00:00")
+        self.assertFalse(task_default.is_unpaid)
+
+    def test_unpaid_task_unreported_duration(self):
+        task = Task(
+            id="t-unpaid",
+            name="Unpaid Project",
+            created_at="2026-10-01T08:00:00",
+            is_unpaid=True,
+            entries=[
+                TimeEntry(id="e1", start_time="2026-10-01T08:00:00", end_time="2026-10-01T09:00:00", duration_seconds=3600.0),
+                TimeEntry(id="e2", start_time="2026-10-01T09:30:00", end_time="2026-10-01T10:00:00", duration_seconds=1800.0),
+            ],
+        )
+        # Total duration is still computed
+        self.assertEqual(task.total_duration_seconds, 5400.0)
+        # Unreported duration is always 0.0 for unpaid tasks
+        self.assertEqual(task.calculate_unreported_duration(), 0.0)
+        self.assertEqual(task.calculate_unreported_duration(as_of="2026-10-01T08:30:00"), 0.0)
+
     def test_unreported_duration_no_cutoff(self):
         task = Task(
             id="t1",
