@@ -11,6 +11,7 @@ from time_clock.events import EventBus
 from time_clock.gui.clock_panel import ClockPanel
 from time_clock.gui.edit_session_dialog import EditClockInOutDialog
 from time_clock.gui.history_panel import HistoryPanel
+from time_clock.gui.stats_calendar_dialog import StatsCalendarDialog
 from time_clock.gui.task_panel import TaskPanel
 from time_clock.storage import Storage
 
@@ -21,11 +22,11 @@ class TimeClockApp:
     """Main application window for the Time Clock."""
 
     def __init__(
-        self,
-        root: Optional[tk.Tk] = None,
-        engine: Optional[TimeClockEngine] = None,
-        storage: Optional[Storage] = None,
-        event_bus: Optional[EventBus] = None,
+            self,
+            root: Optional[tk.Tk] = None,
+            engine: Optional[TimeClockEngine] = None,
+            storage: Optional[Storage] = None,
+            event_bus: Optional[EventBus] = None,
     ) -> None:
         self.root = root or tk.Tk()
         self._owns_root = root is None
@@ -93,6 +94,12 @@ class TimeClockApp:
         advanced_menu.add_command(
             label="Delete Task...",
             command=self._delete_task,
+            underline=0,
+        )
+
+        advanced_menu.add_command(
+            label="Historical Time Stats...",
+            command=self._open_stats_calendar,
             underline=0,
         )
         menubar.add_cascade(label="Advanced", menu=advanced_menu, underline=0)
@@ -218,6 +225,11 @@ class TimeClockApp:
             logger.warning("Error closing storage on app exit: %s", e)
 
         self.root.destroy()
+
+    def _open_stats_calendar(self) -> None:
+        """Open the modal dialog for viewing historical time statistics via calendar."""
+
+        StatsCalendarDialog(parent=self.root, engine=self.engine)
 
     def run(self) -> None:
         """Start the Tkinter event loop."""

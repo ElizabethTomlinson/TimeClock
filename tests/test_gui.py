@@ -12,9 +12,11 @@ from time_clock.events import EventBus
 from time_clock.gui.app import TimeClockApp
 from time_clock.gui.edit_session_dialog import EditClockInOutDialog
 from time_clock.gui.prompt_dialog import InputDialog, ask_string
+from time_clock.gui.stats_calendar_dialog import StatsCalendarDialog
 from time_clock.gui.task_options_dialog import TaskOptionsDialog, ask_task_options
 from time_clock.models import TimeEntry
 from time_clock.storage import SQLiteStorage
+from datetime import date, timedelta
 
 
 class TestGUI(unittest.TestCase):
@@ -500,6 +502,7 @@ class TestGUI(unittest.TestCase):
                     ]
                     self.assertIn("Edit Task...", adv_labels)
                     self.assertIn("Delete Task...", adv_labels)
+                    self.assertIn("Historical Time Stats...", adv_labels)
                     self.assertNotIn("Edit Task Options...", adv_labels)
                     break
             except Exception:
@@ -954,6 +957,95 @@ class TestGUI(unittest.TestCase):
         self.assertEqual(self.engine.get_task(t2.id).name, "Initial Task Two")
 
         dialog.destroy()
+
+    def test_stats_calendar_dialog_initialization_and_default_stats(self):
+        app = TimeClockApp(root=self.root, engine=self.engine)
+        dialog = StatsCalendarDialog(parent=self.root, engine=self.engine)
+        self.root.update_idletasks()
+
+        today = date.today()
+        self.assertEqual(dialog.selected_date, today)
+        self.assertIn(today.strftime("%Y-%m-%d"), dialog.selected_date_var.get())
+        self.assertIn("Daily:", dialog.day_var.get())
+        self.assertIn("Weekly:", dialog.week_var.get())
+        self.assertIn("Monthly:", dialog.month_var.get())
+        dialog.destroy()
+
+    def test_stats_calendar_dialog_navigation(self):
+        app = TimeClockApp(root=self.root, engine=self.engine)
+        dialog = StatsCalendarDialog(parent=self.root, engine=self.engine)
+        self.root.update_idletasks()
+
+        orig_month = dialog.current_month
+        orig_year = dialog.current_year
+
+        # Previous month
+        dialog._prev_month()
+        self.root.update_idletasks()
+        expected_prev_month = 12 if orig_month == 1 else orig_month - 1
+        expected_prev_year = orig_year - 1 if orig_month == 1 else orig_year
+        self.assertEqual(dialog.current_month, expected_prev_month)
+        self.assertEqual(dialog.current_year, expected_prev_year)
+
+        # Next month (back to original)
+        dialog._next_month()
+        self.root.update_idletasks()
+        self.assertEqual(dialog.current_month, orig_month)
+        self.assertEqual(dialog.current_year, orig_year)
+        dialog.destroy()
+
+    def test_stats_calendar_dialog_past_date_selection_updates_stats(self):
+        app = TimeClockApp(root=self.root, engine=self.engine)
+        task = self.engine.create_task("Historical Task")
+        # Add past entry on 2026-05-15
+        self.engine.add_manual_time_entry(
+            task.id, "2026-05-15T10:00:00", "2026-05-15T12:00:00"
+        )
+        self.root.update_idletasks()
+
+        dialog = StatsCalendarDialog(parent=self.root, engine=self.engine)
+        past_date = date(2026, 5, 15)
+        dialog._select_date(past_date)
+        self.root.update_idletasks()
+
+        self.assertEqual(dialog.selected_date, past_date)
+        self.assertEqual(dialog.day_var.get(), "Daily: 02:00:00")
+        self.assertEqual(dialog.week_var.get(), "Weekly: 02:00:00")
+        self.assertEqual(dialog.month_var.get(), "Monthly: 02:00:00")
+        dialog.destroy()
+
+    def test_stats_calendar_dialog_future_dates_prevented(self):
+        app = TimeClockApp(root=self.root, engine=self.engine)
+        dialog = StatsCalendarDialog(parent=self.root, engine=self.engine)
+        self.root.update_idletasks()
+
+        today = date.today()
+        future_date = today + timedelta(days=10)
+
+        # Attempt selecting future date
+        dialog._select_date(future_date)
+        self.root.update_idletasks()
+
+        # Date should remain today
+        self.assertEqual(dialog.selected_date, today)
+
+        # In current month view, verify future day buttons have disabled state
+        dialog.current_year = future_date.year
+        dialog.current_month = future_date.month
+        dialog._render_calendar()
+        self.root.update_idletasks()
+
+        if future_date.day in dialog._day_buttons:
+            btn = dialog._day_buttons[future_date.day]
+            self.assertEqual(str(btn.cget("state")), "disabled")
+
+        dialog.destroy()
+
+    @patch("time_clock.gui.app.StatsCalendarDialog")
+    def test_app_open_stats_calendar(self, mock_dialog):
+        app = TimeClockApp(root=self.root, engine=self.engine)
+        app._open_stats_calendar()
+        mock_dialog.assert_called_once_with(parent=self.root, engine=self.engine)
 
 
 if __name__ == "__main__":

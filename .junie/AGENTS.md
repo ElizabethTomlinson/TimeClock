@@ -16,6 +16,7 @@ This document contains project-specific information, setup instructions, testing
   - `app.py`: `TimeClockApp` main window and container with `File` and `Advanced` menu bars.
   - `edit_session_dialog.py`: `EditClockInOutDialog` modal for editing active session start times and modifying/adding historical sessions.
   - `prompt_dialog.py`: Centered single-value prompt input dialog.
+  - `stats_calendar_dialog.py`: `StatsCalendarDialog` modal for viewing historical time statistics (daily, weekly, monthly) via calendar.
   - `task_options_dialog.py`: `TaskOptionsDialog` modal for task creation and editing task options (name and paid/unpaid status).
   - `task_panel.py`: `TaskPanel` for task selection and management.
   - `clock_panel.py`: `ClockPanel` for timer display and clock in/out controls.

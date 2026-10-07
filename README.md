@@ -10,11 +10,12 @@
 3. [Managing Tasks](#managing-tasks)
 4. [Tracking Time](#tracking-time)
 5. [Editing Clock In/Out Times (Advanced)](#editing-clock-in-out-times-advanced)
-6. [Managing Reported vs. Unreported Time](#managing-reported-vs-unreported-time)
-7. [Viewing Session History](#viewing-session-history)
-8. [Exporting Your Data](#exporting-your-data)
-9. [Tips for Effective Time Tracking](#tips-for-effective-time-tracking)
-10. [Frequently Asked Questions](#frequently-asked-questions)
+6. [Viewing Historical Time Statistics (Calendar)](#viewing-historical-time-statistics-calendar)
+7. [Managing Reported vs. Unreported Time](#managing-reported-vs-unreported-time)
+8. [Viewing Session History](#viewing-session-history)
+9. [Exporting Your Data](#exporting-your-data)
+10. [Tips for Effective Time Tracking](#tips-for-effective-time-tracking)
+11. [Frequently Asked Questions](#frequently-asked-questions)
 
 ---
 
@@ -35,7 +36,7 @@ The Time Clock window is organized into three intuitive areas:
 
 ```
 +------------------------------------------------------------------------+
-|  Top Menu: File | Advanced (Edit Task..., Delete Task...)              |
+|  Top Menu: File | Advanced (Edit Task..., Delete Task..., Stats...)    |
 +------------------------------------+-----------------------------------+
 |  Tasks Panel (Left)                |  Clock Tracker (Top Right)        |
 |  - Add new tasks (Paid / Unpaid)   |  - Active task status & timer     |
@@ -53,7 +54,7 @@ The Time Clock window is organized into three intuitive areas:
 ```
 
 - **File Menu (Top Bar)**: Access global data export (CSV/JSON) and application exit.
-- **Advanced Menu (Top Bar)**: Access tools to open the unified task editing dialog (**Edit Task...**) or permanently delete a selected task (**Delete Task...**).
+- **Advanced Menu (Top Bar)**: Access tools to open the unified task editing dialog (**Edit Task...**), permanently delete a selected task (**Delete Task...**), or inspect historical period metrics using a calendar dialog (**Historical Time Stats...**).
 - **Tasks Panel (Left Side)**: Manage your list of projects or tasks, view the `💰` paid status column, configure options, and switch between them.
 - **Clock Tracker (Top Right)**: Control your live timer and see current session progress.
 - **Session History (Bottom Right)**: Review logged work sessions for the selected task.
@@ -204,6 +205,26 @@ If the selected task is currently clocked in:
   - Start timestamps cannot be set in the future.
   - End timestamps cannot be earlier than start timestamps.
   - Descriptive error messages are displayed if an invalid date or timestamp format is entered.
+
+---
+
+## Viewing Historical Time Statistics (Calendar)
+
+Time Clock includes a historical statistics tool that allows you to inspect past time tracking metrics across all tasks for any chosen date.
+
+### Opening Historical Time Stats
+1. In the top application menu bar, click **Advanced**.
+2. Select **Historical Time Stats...**.
+3. A modal dialog will appear centered over the application window displaying an interactive monthly calendar and time summary statistics.
+
+### Navigating the Calendar & Viewing Statistics
+- **Month Navigation**: Use the `<` and `>` buttons at the top of the calendar to move between previous and next calendar months.
+- **Selecting a Date**: Click on any past or present date in the calendar grid. The selected date will be highlighted, and the statistics section below will immediately update.
+- **Time Statistics Breakdown**:
+  - **Daily**: Total time tracked across all tasks for the selected 24-hour day.
+  - **Weekly**: Total time tracked during the calendar week (Monday through Sunday) containing the selected day.
+  - **Monthly**: Total time tracked during the calendar month containing the selected day.
+- **Future Dates Restriction**: Dates in the future are disabled and cannot be clicked or selected because time tracking records and metrics only apply to past and current dates.
 
 ---
 
