@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import logging
 import tkinter as tk
+from pathlib import Path
 from tkinter import filedialog, messagebox, ttk
 from typing import Optional
 
@@ -54,11 +55,31 @@ class TimeClockApp:
             self.root.geometry(f"{width}x{height}+{x}+{y}")
         except Exception:
             self.root.geometry(f"{width}x{height}")
+        self._set_app_icon()
+
+    def _set_app_icon(self) -> None:
+        """Attempt to set the application window/dock icon if asset exists."""
+        candidate_paths = [
+            Path(__file__).resolve().parent.parent.parent / "assets" / "icon.png",
+            Path(__file__).resolve().parent.parent.parent / "assets" / "AppIcon_1024.png",
+            Path(__file__).resolve().parent.parent / "assets" / "icon.png",
+            Path("assets/icon.png").resolve(),
+        ]
+        for icon_path in candidate_paths:
+            if icon_path.exists():
+                try:
+                    self._icon_image = tk.PhotoImage(file=str(icon_path))
+                    self.root.iconphoto(True, self._icon_image)
+                    break
+                except Exception as e:
+                    logger.debug("Could not set window icon from %s: %s", icon_path, e)
 
     def _setup_styles(self) -> None:
         self.style = ttk.Style(self.root)
         available_themes = self.style.theme_names()
-        if "clam" in available_themes:
+        if "aqua" in available_themes:
+            self.style.theme_use("aqua")
+        elif "clam" in available_themes:
             self.style.theme_use("clam")
 
     def _build_menu(self) -> None:

@@ -5,7 +5,13 @@
 ---
 
 ## Table of Contents
-1. [Getting Started](#getting-started)
+1. [Getting Started & Installation](#getting-started--installation)
+   - [macOS Desktop App Installation](#macos-desktop-app-installation)
+   - [Pinning to macOS Dock & Taskbar](#pinning-to-macos-dock--taskbar)
+   - [Migrating an Existing Database](#migrating-an-existing-database)
+   - [Configuration & Custom Database Location](#configuration--custom-database-location)
+   - [Updating the Application](#updating-the-application)
+   - [Direct Terminal Launch](#direct-terminal-launch)
 2. [Interface Overview](#interface-overview)
 3. [Managing Tasks](#managing-tasks)
 4. [Tracking Time](#tracking-time)
@@ -19,14 +25,80 @@
 
 ---
 
-## Getting Started
+## Getting Started & Installation
 
-### Launching the Application
-To start Time Clock, open your terminal in the application folder and run:
+### macOS Desktop App Installation
+You can install Time Clock directly as a standard, native macOS application without third-party app stores or complex setup:
+
+1. Open your terminal in the `time_clock` project folder.
+2. Run the installation script:
+   ```bash
+   ./scripts/install_macos.sh
+   ```
+3. The script packages and places **Time Clock.app** into your `/Applications` directory (or `~/Applications` if running without administrator permissions).
+4. You can now launch Time Clock from **Spotlight** (`Cmd + Space` -> type `Time Clock`), **Launchpad**, or **Finder -> Applications**.
+
+### Pinning to macOS Dock & Taskbar
+To keep Time Clock easily accessible on your macOS taskbar/Dock:
+1. Open **Finder** and navigate to **Applications** (or press `Cmd + Shift + A`).
+2. Locate **Time Clock** (with the blue-and-crimson clock icon).
+3. Drag and drop **Time Clock** into your Dock.
+4. Alternatively, while Time Clock is running, right-click (or two-finger tap) the clock icon in your Dock, hover over **Options**, and select **Keep in Dock**.
+
+### Migrating an Existing Database
+If you have previously tracked hours in a local project database (such as `data/time_clock.db`), you can easily copy your existing data to the installed application's database location so that none of your history is lost:
+
+```bash
+# Ensure target application support directory exists
+mkdir -p "$HOME/Library/Application Support/TimeClock"
+
+# Copy your existing database file
+cp data/time_clock.db "$HOME/Library/Application Support/TimeClock/time_clock.db"
+```
+
+The installed application will automatically recognize your tasks, session timestamps, and billing statuses on next launch.
+
+### Configuration & Custom Database Location
+Time Clock uses a simple, user-editable JSON configuration file located at:
+- **`~/.config/time_clock/config.json`**
+
+When the application is first launched, it automatically creates this file with standard default paths:
+```json
+{
+  "db_path": "~/Library/Application Support/TimeClock/time_clock.db"
+}
+```
+
+#### Customizing the Database Path
+If you prefer storing your time tracking database in another directory (for example, in your personal Documents folder or a synchronized local folder):
+1. Open `~/.config/time_clock/config.json` in any text editor.
+2. Modify the `"db_path"` property to your desired path (supports `~` home directory expansion or full absolute paths):
+   ```json
+   {
+     "db_path": "~/Documents/MyTimeTracking/time_clock.db"
+   }
+   ```
+3. Save the file and restart Time Clock.
+
+#### Environment Variable Overrides
+For automated environments or custom scripts:
+- `TIME_CLOCK_CONFIG`: Override the configuration file path (e.g., `export TIME_CLOCK_CONFIG=/path/to/custom_config.json`).
+- `TIME_CLOCK_DB`: Directly override the database file path (e.g., `export TIME_CLOCK_DB=/path/to/custom_db.db`).
+
+### Updating the Application
+When new features or bug fixes are pulled from the repository, update your installed macOS application bundle in seconds:
+
+```bash
+./scripts/update_macos.sh
+```
+
+The update script syncs the newest application files into `/Applications/Time Clock.app` while leaving your personal database (`~/Library/Application Support/TimeClock/time_clock.db`) and configuration file untouched.
+
+### Direct Terminal Launch
+You can also launch Time Clock directly from the command line:
 ```bash
 python3 main.py
 ```
-The application window will open immediately. All your tasks, tracked sessions, and reporting history are saved automatically on your local machine so you never lose your progress.
 
 ---
 

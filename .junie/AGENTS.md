@@ -9,11 +9,12 @@ This document contains project-specific information, setup instructions, testing
 **Time Clock** is a modular Python desktop time tracking application with zero external runtime dependencies. It uses a decoupled, event-driven architecture structured as follows:
 
 - **`time_clock/models.py`**: Domain dataclasses (`TimeEntry`, `Task`, `AppState`) with explicit dictionary serialization/deserialization methods (`to_dict` / `from_dict`) and duration/ISO-8601 formatting utilities (`format_duration`, `iso_now`, `parse_iso`).
-- **`time_clock/storage.py`**: `SQLiteStorage` (and base `Storage`) persisting domain state to SQLite database (default: `data/time_clock.db`) with automatic table creation and legacy JSON migration handling.
+- **`time_clock/config.py`**: `AppConfig` runtime configuration manager loading settings from `~/.config/time_clock/config.json` (or `TIME_CLOCK_CONFIG` / `TIME_CLOCK_DB` environment variables) with default database path pointing to `~/Library/Application Support/TimeClock/time_clock.db` and automatic directory/file generation.
+- **`time_clock/storage.py`**: `SQLiteStorage` (and base `Storage`) persisting domain state to SQLite database (default: resolved from `AppConfig.db_path`) with automatic table creation and legacy JSON migration handling.
 - **`time_clock/events.py`**: In-process synchronous publish-subscribe `EventBus` using the `EventType` enum (`TASK_*`, `CLOCK_IN`, `CLOCK_OUT`, `TICK`, `ENTRY_UPDATED`, `STATE_LOADED`, `STATE_SAVED`) for decoupling the business logic from GUI components.
 - **`time_clock/engine.py`**: `TimeClockEngine` coordinator implementing business rules (clocking in/out, task CRUD, updating active/completed session timestamps, duration calculations, active timer tracking) and emitting lifecycle events.
 - **`time_clock/gui/`**: Tkinter/ttk desktop interface divided into modular panels:
-  - `app.py`: `TimeClockApp` main window and container with `File` and `Advanced` menu bars.
+  - `app.py`: `TimeClockApp` main window and container with `File` and `Advanced` menu bars, and window/dock icon configuration.
   - `edit_session_dialog.py`: `EditClockInOutDialog` modal for editing active session start times and modifying/adding historical sessions.
   - `prompt_dialog.py`: Centered single-value prompt input dialog.
   - `stats_calendar_dialog.py`: `StatsCalendarDialog` modal for viewing historical time statistics (daily, weekly, monthly) via calendar.
@@ -21,7 +22,11 @@ This document contains project-specific information, setup instructions, testing
   - `task_panel.py`: `TaskPanel` for task selection and management.
   - `clock_panel.py`: `ClockPanel` for timer display and clock in/out controls.
   - `history_panel.py`: `HistoryPanel` for session logs and statistics.
-- **`main.py`**: Application entry point assembling dependencies and launching the UI.
+- **`main.py`**: Application entry point assembling configuration (`load_config()`), storage, engine, and launching the UI.
+- **`scripts/`**: Automation scripts:
+  - `generate_icon.py`: Pure-Python clock icon renderer compiling multi-resolution PNGs and macOS `assets/AppIcon.icns`.
+  - `install_macos.sh`: Standalone installer packaging `Time Clock.app` into `/Applications` or `~/Applications`.
+  - `update_macos.sh`: Fast code updater for installed `/Applications/Time Clock.app` bundles preserving user data.
 
 ---
 
