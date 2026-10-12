@@ -75,6 +75,111 @@ class PeriodDurations:
 
 
 @dataclass
+class EarningEntry:
+    """Represents a logged earnings record associated with a task."""
+    id: str
+    task_id: str
+    amount: float
+    earned_at: str
+    note: str = ""
+
+    def to_dict(self) -> Dict[str, Any]:
+        return {
+            "id": self.id,
+            "task_id": self.task_id,
+            "amount": self.amount,
+            "earned_at": self.earned_at,
+            "note": self.note,
+        }
+
+    @classmethod
+    def from_dict(cls, data: Dict[str, Any]) -> EarningEntry:
+        return cls(
+            id=data.get("id", ""),
+            task_id=data.get("task_id", ""),
+            amount=float(data.get("amount", 0.0)),
+            earned_at=data.get("earned_at", ""),
+            note=data.get("note", ""),
+        )
+
+
+@dataclass
+class MonthlyGoal:
+    """Represents monthly earnings target settings."""
+    month_key: str  # Format: "YYYY-MM"
+    goal_amount: float = 0.0
+    use_28_day_month: bool = False
+
+    def to_dict(self) -> Dict[str, Any]:
+        return {
+            "month_key": self.month_key,
+            "goal_amount": self.goal_amount,
+            "use_28_day_month": self.use_28_day_month,
+        }
+
+    @classmethod
+    def from_dict(cls, data: Dict[str, Any]) -> MonthlyGoal:
+        return cls(
+            month_key=data.get("month_key", ""),
+            goal_amount=float(data.get("goal_amount", 0.0)),
+            use_28_day_month=bool(data.get("use_28_day_month", False)),
+        )
+
+
+@dataclass
+class EarningsPeriodStats:
+    """Container for earnings totals, targets, and progress bar percentages."""
+    day_total: float = 0.0
+    week_total: float = 0.0
+    month_total: float = 0.0
+    goal_amount: float = 0.0
+    needed_per_day: float = 0.0
+    use_28_day_month: bool = False
+    day_progress_pct: float = 0.0
+    week_progress_pct: float = 0.0
+    month_progress_pct: float = 0.0
+    week_pace_pct: float = 0.0
+    month_pace_pct: float = 0.0
+    week_expected_total: float = 0.0
+    month_expected_total: float = 0.0
+
+    def to_dict(self) -> Dict[str, Any]:
+        return {
+            "day_total": self.day_total,
+            "week_total": self.week_total,
+            "month_total": self.month_total,
+            "goal_amount": self.goal_amount,
+            "needed_per_day": self.needed_per_day,
+            "use_28_day_month": self.use_28_day_month,
+            "day_progress_pct": self.day_progress_pct,
+            "week_progress_pct": self.week_progress_pct,
+            "month_progress_pct": self.month_progress_pct,
+            "week_pace_pct": self.week_pace_pct,
+            "month_pace_pct": self.month_pace_pct,
+            "week_expected_total": self.week_expected_total,
+            "month_expected_total": self.month_expected_total,
+        }
+
+    @classmethod
+    def from_dict(cls, data: Dict[str, Any]) -> EarningsPeriodStats:
+        return cls(
+            day_total=float(data.get("day_total", 0.0)),
+            week_total=float(data.get("week_total", 0.0)),
+            month_total=float(data.get("month_total", 0.0)),
+            goal_amount=float(data.get("goal_amount", 0.0)),
+            needed_per_day=float(data.get("needed_per_day", 0.0)),
+            use_28_day_month=bool(data.get("use_28_day_month", False)),
+            day_progress_pct=float(data.get("day_progress_pct", 0.0)),
+            week_progress_pct=float(data.get("week_progress_pct", 0.0)),
+            month_progress_pct=float(data.get("month_progress_pct", 0.0)),
+            week_pace_pct=float(data.get("week_pace_pct", 0.0)),
+            month_pace_pct=float(data.get("month_pace_pct", 0.0)),
+            week_expected_total=float(data.get("week_expected_total", 0.0)),
+            month_expected_total=float(data.get("month_expected_total", 0.0)),
+        )
+
+
+@dataclass
 class TimeEntry:
     """Represents a single clocked-in time session."""
     id: str

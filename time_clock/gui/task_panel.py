@@ -7,6 +7,7 @@ from typing import Optional
 
 from time_clock.engine import TimeClockEngine
 from time_clock.events import Event, EventType
+from time_clock.gui.add_earnings_dialog import AddEarningsDialog
 from time_clock.gui.edit_session_dialog import EditClockInOutDialog
 from time_clock.gui.prompt_dialog import ask_string
 from time_clock.gui.task_options_dialog import ask_task_options
@@ -103,6 +104,9 @@ class TaskPanel(ttk.LabelFrame):
         options_btn = ttk.Button(btn_frame, text="Options...", command=self._on_edit_options)
         options_btn.pack(side=tk.LEFT, padx=(0, 4), expand=True, fill=tk.X)
 
+        earnings_btn = ttk.Button(btn_frame, text="Add Earnings...", command=self._on_add_earnings)
+        earnings_btn.pack(side=tk.LEFT, padx=(0, 4), expand=True, fill=tk.X)
+
         self.report_btn = ttk.Button(btn_frame, text="Report...", command=self._on_mark_reported_menu)
         self.report_btn.pack(side=tk.LEFT, padx=(0, 4), expand=True, fill=tk.X)
 
@@ -118,6 +122,8 @@ class TaskPanel(ttk.LabelFrame):
         self.engine.event_bus.subscribe(EventType.TASK_UPDATED, self._on_task_renamed_event)
         self.engine.event_bus.subscribe(EventType.TASK_SELECTED, self._on_task_selected_event)
         self.engine.event_bus.subscribe(EventType.TASK_REPORTED, self._on_task_reported_event)
+        self.engine.event_bus.subscribe(EventType.EARNING_ADDED, self._on_earning_event)
+        self.engine.event_bus.subscribe(EventType.EARNING_DELETED, self._on_earning_event)
         self.engine.event_bus.subscribe(EventType.CLOCK_IN, self._on_clock_in_event)
         self.engine.event_bus.subscribe(EventType.CLOCK_OUT, self._on_clock_out_event)
         self.engine.event_bus.subscribe(EventType.ENTRY_UPDATED, self._on_entry_updated_event)
@@ -206,6 +212,18 @@ class TaskPanel(ttk.LabelFrame):
             self.engine.unarchive_task(task.id)
         except Exception as e:
             messagebox.showerror("Error", str(e), parent=self.winfo_toplevel())
+
+    def _on_add_earnings(self) -> None:
+        selection = self.tree.selection()
+        target_id = selection[0] if selection else self.engine.state.active_task_id
+        AddEarningsDialog(
+            parent=self.winfo_toplevel(),
+            engine=self.engine,
+            initial_task_id=target_id,
+        )
+
+    def _on_earning_event(self, event: Event) -> None:
+        self.refresh_task_list()
 
     def _on_rename_task(self) -> None:
         selection = self.tree.selection()

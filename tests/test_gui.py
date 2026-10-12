@@ -1047,6 +1047,121 @@ class TestGUI(unittest.TestCase):
         app._open_stats_calendar()
         mock_dialog.assert_called_once_with(parent=self.root, engine=self.engine)
 
+    def test_app_view_switcher_and_active_timer(self):
+        app = TimeClockApp(root=self.root, engine=self.engine)
+        task = self.engine.create_task("Timer View Switch Task")
+        self.root.update_idletasks()
+
+        # Start timer in Time Clock view
+        self.engine.clock_in()
+        self.root.update_idletasks()
+        self.assertTrue(self.engine.state.is_running)
+        self.assertEqual(app.current_view, "time_clock")
+
+        # Switch to Earnings view via toggle button
+        app.toggle_view()
+        self.root.update_idletasks()
+        self.assertEqual(app.current_view, "earnings")
+        self.assertEqual(app.view_toggle_btn.cget("text"), "Switch to Time Clock")
+
+        # Verify timer is STILL running and engine ticks
+        app._on_tick()
+        self.root.update_idletasks()
+        self.assertTrue(self.engine.state.is_running)
+
+        # Switch back to Time Clock view
+        app.toggle_view()
+        self.root.update_idletasks()
+        self.assertEqual(app.current_view, "time_clock")
+        self.assertEqual(app.view_toggle_btn.cget("text"), "Switch to Earnings View")
+        self.assertTrue(self.engine.state.is_running)
+
+        # Clock out
+        self.engine.clock_out()
+        self.root.update_idletasks()
+        self.assertFalse(self.engine.state.is_running)
+
+    def test_paced_progress_bar_rendering(self):
+        from time_clock.gui.earnings_panel import PacedProgressBar
+
+        pb = PacedProgressBar(self.root, height=20, width=200)
+        pb.pack()
+        self.root.update_idletasks()
+
+        # Initial state
+        self.assertEqual(pb.value, 0.0)
+        self.assertIsNone(pb.pace_marker)
+
+        # Set progress and pace marker
+        pb.set_progress(45.0, 50.0)
+        self.root.update_idletasks()
+        self.assertEqual(pb.value, 45.0)
+        self.assertEqual(pb.pace_marker, 50.0)
+
+        # Verify drawn canvas items
+        items = pb.find_all()
+        self.assertTrue(len(items) > 0)
+        track_items = pb.find_withtag("track")
+        fill_items = pb.find_withtag("fill")
+        marker_items = pb.find_withtag("pace_marker")
+        self.assertEqual(len(track_items), 1)
+        self.assertEqual(len(fill_items), 1)
+        self.assertEqual(len(marker_items), 1)
+
+        # Clamping behavior
+        pb.set_progress(150.0, -20.0)
+        self.assertEqual(pb.value, 100.0)
+        self.assertEqual(pb.pace_marker, 0.0)
+
+        # Clear marker
+        pb.set_progress(60.0, None)
+        self.assertIsNone(pb.pace_marker)
+        self.assertEqual(len(pb.find_withtag("pace_marker")), 0)
+
+        # Dict access compatibility
+        pb["value"] = 35.0
+        self.assertEqual(pb["value"], 35.0)
+        self.assertEqual(pb.value, 35.0)
+
+        # Trigger configure event
+        pb._on_configure()
+        self.root.update_idletasks()
+        pb.destroy()
+
+    def test_earnings_panel_pace_markers(self):
+        from time_clock.gui.earnings_panel import EarningsPanel
+
+        task = self.engine.create_task("Earnings Pace Task")
+        self.engine.set_monthly_goal(3000.0, use_28_day_month=False)
+
+        panel = EarningsPanel(parent=self.root, engine=self.engine)
+        self.root.update_idletasks()
+
+        # Goal is set with 0 earnings -> behind pace
+        self.assertIsNotNone(panel.week_pb.pace_marker)
+        self.assertIsNotNone(panel.month_pb.pace_marker)
+        self.assertIn("Target Pace:", panel.week_text_var.get())
+        self.assertIn("behind", panel.week_text_var.get())
+        self.assertIn("Target Pace:", panel.month_text_var.get())
+        self.assertIn("behind", panel.month_text_var.get())
+
+        # Add earnings well ahead of pace
+        self.engine.add_earning(task.id, 2500.0)
+        self.root.update_idletasks()
+
+        self.assertIn("ahead", panel.week_text_var.get())
+        self.assertIn("ahead", panel.month_text_var.get())
+
+        # Reset goal to 0
+        self.engine.set_monthly_goal(0.0)
+        self.root.update_idletasks()
+
+        self.assertIsNone(panel.week_pb.pace_marker)
+        self.assertIsNone(panel.month_pb.pace_marker)
+        self.assertIn("No Goal Set", panel.week_text_var.get())
+        self.assertIn("No Goal Set", panel.month_text_var.get())
+        panel.destroy()
+
 
 if __name__ == "__main__":
     unittest.main()

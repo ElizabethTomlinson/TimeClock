@@ -7,9 +7,9 @@ import logging
 import sqlite3
 from contextlib import contextmanager
 from pathlib import Path
-from typing import Dict, Generator, Optional, Union
+from typing import Dict, Generator, List, Optional, Union
 
-from time_clock.models import AppState, Task, TimeEntry
+from time_clock.models import AppState, EarningEntry, MonthlyGoal, Task, TimeEntry
 
 logger = logging.getLogger(__name__)
 
@@ -25,6 +25,26 @@ class Storage(abc.ABC):
     @abc.abstractmethod
     def save(self, state: AppState) -> None:
         """Persist AppState to storage backend."""
+        pass
+
+    def get_earnings(self, task_id: Optional[str] = None) -> List[EarningEntry]:
+        """Retrieve earnings records, optionally filtered by task_id."""
+        return []
+
+    def add_earning(self, entry: EarningEntry) -> None:
+        """Save or insert an earning entry."""
+        pass
+
+    def delete_earning(self, earning_id: str) -> None:
+        """Delete an earning entry by ID."""
+        pass
+
+    def get_monthly_goal(self, month_key: str) -> MonthlyGoal:
+        """Retrieve monthly goal configuration for given month (YYYY-MM)."""
+        return MonthlyGoal(month_key=month_key)
+
+    def set_monthly_goal(self, goal: MonthlyGoal) -> None:
+        """Persist monthly goal configuration."""
         pass
 
     def close(self) -> None:
@@ -118,6 +138,23 @@ class SQLiteStorage(Storage):
                     is_running INTEGER NOT NULL DEFAULT 0,
                     current_session_start TEXT,
                     FOREIGN KEY (active_task_id) REFERENCES tasks(id) ON DELETE SET NULL
+                );
+            """)
+            conn.execute("""
+                CREATE TABLE IF NOT EXISTS earnings (
+                    id TEXT PRIMARY KEY,
+                    task_id TEXT NOT NULL,
+                    amount REAL NOT NULL,
+                    earned_at TEXT NOT NULL,
+                    note TEXT NOT NULL DEFAULT '',
+                    FOREIGN KEY (task_id) REFERENCES tasks(id) ON DELETE CASCADE
+                );
+            """)
+            conn.execute("""
+                CREATE TABLE IF NOT EXISTS monthly_goals (
+                    month_key TEXT PRIMARY KEY,
+                    goal_amount REAL NOT NULL DEFAULT 0.0,
+                    use_28_day_month INTEGER NOT NULL DEFAULT 0
                 );
             """)
 
@@ -287,6 +324,80 @@ class SQLiteStorage(Storage):
                     1 if state.is_running else 0,
                     state.current_session_start,
                 ),
+            )
+
+    def get_earnings(self, task_id: Optional[str] = None) -> List[EarningEntry]:
+        """Retrieve earnings entries ordered by earned_at descending, optionally filtered by task_id."""
+        with self._connection() as conn:
+            if task_id:
+                cursor = conn.execute(
+                    "SELECT id, task_id, amount, earned_at, note FROM earnings WHERE task_id = ? ORDER BY earned_at DESC, id DESC;",
+                    (task_id,),
+                )
+            else:
+                cursor = conn.execute(
+                    "SELECT id, task_id, amount, earned_at, note FROM earnings ORDER BY earned_at DESC, id DESC;"
+                )
+            return [
+                EarningEntry(
+                    id=row["id"],
+                    task_id=row["task_id"],
+                    amount=float(row["amount"]),
+                    earned_at=row["earned_at"],
+                    note=row["note"] or "",
+                )
+                for row in cursor.fetchall()
+            ]
+
+    def add_earning(self, entry: EarningEntry) -> None:
+        """Insert or replace an earning entry."""
+        with self._connection() as conn:
+            conn.execute(
+                """
+                INSERT INTO earnings (id, task_id, amount, earned_at, note)
+                VALUES (?, ?, ?, ?, ?)
+                ON CONFLICT(id) DO UPDATE SET
+                    task_id = excluded.task_id,
+                    amount = excluded.amount,
+                    earned_at = excluded.earned_at,
+                    note = excluded.note;
+                """,
+                (entry.id, entry.task_id, entry.amount, entry.earned_at, entry.note),
+            )
+
+    def delete_earning(self, earning_id: str) -> None:
+        """Delete an earning entry by ID."""
+        with self._connection() as conn:
+            conn.execute("DELETE FROM earnings WHERE id = ?;", (earning_id,))
+
+    def get_monthly_goal(self, month_key: str) -> MonthlyGoal:
+        """Retrieve monthly goal for specified month (YYYY-MM)."""
+        with self._connection() as conn:
+            cursor = conn.execute(
+                "SELECT month_key, goal_amount, use_28_day_month FROM monthly_goals WHERE month_key = ?;",
+                (month_key,),
+            )
+            row = cursor.fetchone()
+            if row:
+                return MonthlyGoal(
+                    month_key=row["month_key"],
+                    goal_amount=float(row["goal_amount"]),
+                    use_28_day_month=bool(row["use_28_day_month"]),
+                )
+            return MonthlyGoal(month_key=month_key, goal_amount=0.0, use_28_day_month=False)
+
+    def set_monthly_goal(self, goal: MonthlyGoal) -> None:
+        """Upsert monthly goal configuration."""
+        with self._connection() as conn:
+            conn.execute(
+                """
+                INSERT INTO monthly_goals (month_key, goal_amount, use_28_day_month)
+                VALUES (?, ?, ?)
+                ON CONFLICT(month_key) DO UPDATE SET
+                    goal_amount = excluded.goal_amount,
+                    use_28_day_month = excluded.use_28_day_month;
+                """,
+                (goal.month_key, goal.goal_amount, 1 if goal.use_28_day_month else 0),
             )
 
     def close(self) -> None:

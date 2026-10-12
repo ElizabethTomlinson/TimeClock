@@ -1,14 +1,18 @@
 """Core TimeClock business engine and state coordinator."""
 from __future__ import annotations
 
+import calendar
 import uuid
-from datetime import datetime
+from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Union
 
 from time_clock.events import EventBus, EventType
 from time_clock.models import (
     AppState,
+    EarningEntry,
+    EarningsPeriodStats,
+    MonthlyGoal,
     PeriodDurations,
     Task,
     TimeEntry,
@@ -495,6 +499,165 @@ class TimeClockEngine:
         }
         self.event_bus.emit(EventType.TICK, payload)
         return payload
+
+    def add_earning(
+        self,
+        task_id: str,
+        amount: float,
+        earned_at: Optional[str] = None,
+        note: str = "",
+    ) -> EarningEntry:
+        """Record earnings for a task."""
+        if task_id not in self.state.tasks:
+            raise KeyError(f"Task with id '{task_id}' not found.")
+        if float(amount) <= 0:
+            raise ValueError("Earnings amount must be greater than zero.")
+
+        if earned_at is None:
+            earned_at_str = iso_now()
+        else:
+            clean_date = earned_at.strip().replace(" ", "T")
+            parsed_dt = parse_iso(clean_date)
+            earned_at_str = parsed_dt.isoformat()
+
+        earning_id = f"earning_{uuid.uuid4().hex[:8]}"
+        entry = EarningEntry(
+            id=earning_id,
+            task_id=task_id,
+            amount=float(amount),
+            earned_at=earned_at_str,
+            note=note.strip(),
+        )
+        self.storage.add_earning(entry)
+        self.event_bus.emit(
+            EventType.EARNING_ADDED,
+            {"earning": entry, "task": self.get_task(task_id)},
+        )
+        return entry
+
+    def delete_earning(self, earning_id: str) -> None:
+        """Delete an earnings entry."""
+        self.storage.delete_earning(earning_id)
+        self.event_bus.emit(EventType.EARNING_DELETED, {"earning_id": earning_id})
+
+    def get_earnings(self, task_id: Optional[str] = None) -> List[EarningEntry]:
+        """Retrieve earnings list, optionally filtered by task_id."""
+        return self.storage.get_earnings(task_id=task_id)
+
+    def get_monthly_goal(self, month_key: Optional[str] = None) -> MonthlyGoal:
+        """Get monthly goal configuration for given month (defaults to current month YYYY-MM)."""
+        key = month_key or datetime.now().strftime("%Y-%m")
+        return self.storage.get_monthly_goal(key)
+
+    def set_monthly_goal(
+        self,
+        goal_amount: float,
+        use_28_day_month: bool = False,
+        month_key: Optional[str] = None,
+    ) -> MonthlyGoal:
+        """Set monthly goal configuration."""
+        if float(goal_amount) < 0:
+            raise ValueError("Monthly goal amount cannot be negative.")
+        key = month_key or datetime.now().strftime("%Y-%m")
+        goal = MonthlyGoal(
+            month_key=key,
+            goal_amount=float(goal_amount),
+            use_28_day_month=bool(use_28_day_month),
+        )
+        self.storage.set_monthly_goal(goal)
+        self.event_bus.emit(EventType.GOAL_UPDATED, goal)
+        return goal
+
+    def get_earnings_stats(self, as_of: Optional[datetime] = None) -> EarningsPeriodStats:
+        """Compute aggregated earnings and goal progress statistics."""
+        now_dt = as_of if as_of is not None else datetime.now()
+        month_key = now_dt.strftime("%Y-%m")
+        goal = self.get_monthly_goal(month_key)
+
+        bounds = get_period_bounds(now_dt)
+        day_start = bounds["day"]
+        day_end = day_start + timedelta(days=1)
+        week_start = bounds["week"]
+        week_end = week_start + timedelta(days=7)
+        month_start = bounds["month"]
+        _, num_days_in_month = calendar.monthrange(now_dt.year, now_dt.month)
+        month_end = month_start + timedelta(days=num_days_in_month)
+
+        day_total = 0.0
+        week_total = 0.0
+        month_total = 0.0
+
+        all_earnings = self.get_earnings()
+        for e in all_earnings:
+            try:
+                e_dt = parse_iso(e.earned_at.replace(" ", "T"))
+                if day_start <= e_dt < day_end:
+                    day_total += e.amount
+                if week_start <= e_dt < week_end:
+                    week_total += e.amount
+                if month_start <= e_dt < month_end:
+                    month_total += e.amount
+            except Exception:
+                pass
+
+        goal_amount = goal.goal_amount
+        use_28_day_month = goal.use_28_day_month
+
+        target_days = 28 if use_28_day_month else num_days_in_month
+        current_day = now_dt.day
+
+        if use_28_day_month:
+            if current_day <= 28:
+                remaining_days = max(1, 28 - current_day + 1)
+            else:
+                remaining_days = 1
+        else:
+            if current_day <= num_days_in_month:
+                remaining_days = max(1, num_days_in_month - current_day + 1)
+            else:
+                remaining_days = 1
+
+        if goal_amount > 0:
+            remaining_goal = max(0.0, goal_amount - month_total)
+            needed_per_day = remaining_goal / remaining_days if remaining_goal > 0 else 0.0
+            daily_target = goal_amount / float(target_days)
+            weekly_target = daily_target * 7.0
+            month_progress_pct = (month_total / goal_amount) * 100.0
+            day_progress_pct = (day_total / daily_target) * 100.0 if daily_target > 0 else 0.0
+            week_progress_pct = (week_total / weekly_target) * 100.0 if weekly_target > 0 else 0.0
+
+            day_of_week = now_dt.weekday() + 1
+            week_pace_pct = (day_of_week / 7.0) * 100.0
+            week_expected_total = weekly_target * (day_of_week / 7.0)
+
+            effective_month_day = min(current_day, target_days)
+            month_pace_pct = (effective_month_day / float(target_days)) * 100.0
+            month_expected_total = daily_target * effective_month_day
+        else:
+            needed_per_day = 0.0
+            day_progress_pct = 0.0
+            week_progress_pct = 0.0
+            month_progress_pct = 0.0
+            week_pace_pct = 0.0
+            month_pace_pct = 0.0
+            week_expected_total = 0.0
+            month_expected_total = 0.0
+
+        return EarningsPeriodStats(
+            day_total=day_total,
+            week_total=week_total,
+            month_total=month_total,
+            goal_amount=goal_amount,
+            needed_per_day=needed_per_day,
+            use_28_day_month=use_28_day_month,
+            day_progress_pct=day_progress_pct,
+            week_progress_pct=week_progress_pct,
+            month_progress_pct=month_progress_pct,
+            week_pace_pct=week_pace_pct,
+            month_pace_pct=month_pace_pct,
+            week_expected_total=week_expected_total,
+            month_expected_total=month_expected_total,
+        )
 
     def export_data(
         self,

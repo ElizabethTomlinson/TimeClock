@@ -9,7 +9,9 @@ from typing import Optional
 
 from time_clock.engine import TimeClockEngine
 from time_clock.events import EventBus
+from time_clock.gui.add_earnings_dialog import AddEarningsDialog
 from time_clock.gui.clock_panel import ClockPanel
+from time_clock.gui.earnings_panel import EarningsPanel
 from time_clock.gui.edit_session_dialog import EditClockInOutDialog
 from time_clock.gui.history_panel import HistoryPanel
 from time_clock.gui.stats_calendar_dialog import StatsCalendarDialog
@@ -106,7 +108,25 @@ class TimeClockApp:
 
         menubar.add_cascade(label="File", menu=file_menu, underline=0)
 
+        view_menu = tk.Menu(menubar, tearoff=False)
+        view_menu.add_command(
+            label="Time Clock View",
+            command=self.show_timeclock_view,
+            underline=0,
+        )
+        view_menu.add_command(
+            label="Earnings View",
+            command=self.show_earnings_view,
+            underline=0,
+        )
+        menubar.add_cascade(label="View", menu=view_menu, underline=0)
+
         advanced_menu = tk.Menu(menubar, tearoff=False)
+        advanced_menu.add_command(
+            label="Add Earnings...",
+            command=self._open_add_earnings,
+            underline=0,
+        )
         advanced_menu.add_command(
             label="Edit Task...",
             command=self._open_edit_clock_in_out,
@@ -126,6 +146,17 @@ class TimeClockApp:
         menubar.add_cascade(label="Advanced", menu=advanced_menu, underline=0)
 
         self.root.config(menu=menubar)
+
+    def _open_add_earnings(self) -> None:
+        """Open the modal dialog for recording task earnings."""
+        active_id = None
+        if hasattr(self, "task_panel") and self.task_panel:
+            selection = self.task_panel.tree.selection()
+            if selection:
+                active_id = selection[0]
+            elif self.engine.state.active_task_id:
+                active_id = self.engine.state.active_task_id
+        AddEarningsDialog(parent=self.root, engine=self.engine, initial_task_id=active_id)
 
     def _open_edit_clock_in_out(self) -> None:
         """Open the modal dialog for editing clock in/out times and sessions."""
@@ -199,15 +230,39 @@ class TimeClockApp:
             return None
 
     def _build_layout(self) -> None:
-        main_container = ttk.Frame(self.root, padding=12)
-        main_container.pack(fill=tk.BOTH, expand=True)
+        # Top Navigation Header with View Switcher
+        self.nav_header = ttk.Frame(self.root, padding=(12, 10, 12, 4))
+        self.nav_header.pack(fill=tk.X, side=tk.TOP)
+
+        self.view_title_var = tk.StringVar(value="⏱️ Time Clock")
+        self.view_title_lbl = ttk.Label(
+            self.nav_header,
+            textvariable=self.view_title_var,
+            font=("Helvetica", 12, "bold"),
+        )
+        self.view_title_lbl.pack(side=tk.LEFT)
+
+        self.view_toggle_btn = ttk.Button(
+            self.nav_header,
+            text="Switch to Earnings View",
+            command=self.toggle_view,
+        )
+        self.view_toggle_btn.pack(side=tk.RIGHT)
+
+        # Content Container for stackable views
+        self.content_container = ttk.Frame(self.root)
+        self.content_container.pack(fill=tk.BOTH, expand=True)
+
+        # 1. Time Clock View Container
+        self.timeclock_view = ttk.Frame(self.content_container, padding=(12, 4, 12, 12))
+        self.timeclock_view.pack(fill=tk.BOTH, expand=True)
 
         # Left Column: TaskPanel
-        self.task_panel = TaskPanel(main_container, self.engine)
+        self.task_panel = TaskPanel(self.timeclock_view, self.engine)
         self.task_panel.pack(side=tk.LEFT, fill=tk.BOTH, expand=True, padx=(0, 8))
 
         # Right Column: ClockPanel & HistoryPanel
-        right_container = ttk.Frame(main_container)
+        right_container = ttk.Frame(self.timeclock_view)
         right_container.pack(side=tk.RIGHT, fill=tk.BOTH, expand=True, padx=(8, 0))
 
         self.clock_panel = ClockPanel(right_container, self.engine)
@@ -215,6 +270,37 @@ class TimeClockApp:
 
         self.history_panel = HistoryPanel(right_container, self.engine)
         self.history_panel.pack(side=tk.BOTTOM, fill=tk.BOTH, expand=True)
+
+        # 2. Earnings View Container
+        self.earnings_panel = EarningsPanel(self.content_container, self.engine)
+        self.earnings_view = self.earnings_panel
+
+        self.current_view = "time_clock"
+
+    def show_timeclock_view(self) -> None:
+        """Switch to the primary Time Clock view."""
+        self.earnings_view.pack_forget()
+        self.timeclock_view.pack(fill=tk.BOTH, expand=True)
+        self.current_view = "time_clock"
+        self.view_title_var.set("⏱️ Time Clock")
+        self.view_toggle_btn.configure(text="Switch to Earnings View")
+        self.task_panel.refresh_task_list()
+
+    def show_earnings_view(self) -> None:
+        """Switch to the dedicated Earnings view."""
+        self.timeclock_view.pack_forget()
+        self.earnings_view.pack(fill=tk.BOTH, expand=True)
+        self.current_view = "earnings"
+        self.view_title_var.set("💰 Earnings & Goals")
+        self.view_toggle_btn.configure(text="Switch to Time Clock")
+        self.earnings_panel.refresh()
+
+    def toggle_view(self) -> None:
+        """Toggle between Time Clock and Earnings views."""
+        if self.current_view == "time_clock":
+            self.show_earnings_view()
+        else:
+            self.show_timeclock_view()
 
     def _setup_lifecycle(self) -> None:
         self.root.protocol("WM_DELETE_WINDOW", self.on_close)

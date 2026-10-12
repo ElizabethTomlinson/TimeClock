@@ -15,13 +15,14 @@
 2. [Interface Overview](#interface-overview)
 3. [Managing Tasks](#managing-tasks)
 4. [Tracking Time](#tracking-time)
-5. [Editing Clock In/Out Times (Advanced)](#editing-clock-in-out-times-advanced)
-6. [Viewing Historical Time Statistics (Calendar)](#viewing-historical-time-statistics-calendar)
-7. [Managing Reported vs. Unreported Time](#managing-reported-vs-unreported-time)
-8. [Viewing Session History](#viewing-session-history)
-9. [Exporting Your Data](#exporting-your-data)
-10. [Tips for Effective Time Tracking](#tips-for-effective-time-tracking)
-11. [Frequently Asked Questions](#frequently-asked-questions)
+5. [Tracking Earnings & Monthly Goals](#tracking-earnings--monthly-goals)
+6. [Editing Clock In/Out Times (Advanced)](#editing-clock-in-out-times-advanced)
+7. [Viewing Historical Time Statistics (Calendar)](#viewing-historical-time-statistics-calendar)
+8. [Managing Reported vs. Unreported Time](#managing-reported-vs-unreported-time)
+9. [Viewing Session History](#viewing-session-history)
+10. [Exporting Your Data](#exporting-your-data)
+11. [Tips for Effective Time Tracking](#tips-for-effective-time-tracking)
+12. [Frequently Asked Questions](#frequently-asked-questions)
 
 ---
 
@@ -104,20 +105,20 @@ python3 main.py
 
 ## Interface Overview
 
-The Time Clock window is organized into three intuitive areas:
+The Time Clock window is organized into intuitive, switchable views accessible via the top navigation toggle button and **View** menu:
 
 ```
 +------------------------------------------------------------------------+
-|  Top Menu: File | Advanced (Edit Task..., Delete Task..., Stats...)    |
+|  Top Header: View Switcher (Switch between Time Clock & Earnings View) |
+|  Top Menu: File | View | Advanced                                      |
 +------------------------------------+-----------------------------------+
 |  Tasks Panel (Left)                |  Clock Tracker (Top Right)        |
 |  - Add new tasks (Paid / Unpaid)   |  - Active task status & timer     |
 |  - 💰 Paid status indicator column |  - All Tasks Summary: Day/Week/Mo |
 |  - Select, rename, archive tasks   |  - Clock In / Clock Out button    |
-|  - Unified Edit Task dialog        |  - Mark Reported button           |
-|  - Show/hide archived tasks        |                                   |
-|  - View total & unreported times   |                                   |
-|                                    +-----------------------------------+
+|  - Add Earnings... per task        |  - Mark Reported button           |
+|  - Unified Edit Task dialog        |                                   |
+|  - View total & unreported times   +-----------------------------------+
 |                                    |  Session History (Bottom Right)   |
 |                                    |  - Detailed session timestamps    |
 |                                    |  - Reported vs unreported status  |
@@ -125,9 +126,11 @@ The Time Clock window is organized into three intuitive areas:
 +------------------------------------+-----------------------------------+
 ```
 
+- **Top Header Bar**: Switch instantly between the **Time Clock View** and the dedicated **Earnings View**.
 - **File Menu (Top Bar)**: Access global data export (CSV/JSON) and application exit.
-- **Advanced Menu (Top Bar)**: Access tools to open the unified task editing dialog (**Edit Task...**), permanently delete a selected task (**Delete Task...**), or inspect historical period metrics using a calendar dialog (**Historical Time Stats...**).
-- **Tasks Panel (Left Side)**: Manage your list of projects or tasks, view the `💰` paid status column, configure options, and switch between them.
+- **View Menu (Top Bar)**: Switch between Time Clock and Earnings & Goals views.
+- **Advanced Menu (Top Bar)**: Log task earnings (**Add Earnings...**), open the unified task editing dialog (**Edit Task...**), permanently delete a selected task (**Delete Task...**), or inspect historical period metrics using a calendar dialog (**Historical Time Stats...**).
+- **Tasks Panel (Left Side)**: Manage your list of projects or tasks, view the `💰` paid status column, record earnings, and configure options.
 - **Clock Tracker (Top Right)**: Control your live timer and see current session progress.
 - **Session History (Bottom Right)**: Review logged work sessions for the selected task.
 
@@ -236,6 +239,55 @@ Directly below the active task counters in the **Clock Tracker**, the **All Task
 
 ### Persistent Running Timer on Exit
 If you close the application window while a timer is running without clocking out, the clock continues running in the background. When you reopen Time Clock, your active session seamlessly resumes from where you left off, with your original start time and elapsed duration preserved.
+
+---
+
+## Tracking Earnings & Monthly Goals
+
+Time Clock includes a dedicated **Earnings View** and seamless earnings logging integrated directly with your tasks.
+
+### Switching Between Time Clock and Earnings Views
+- Click the top navigation button (**Switch to Earnings View** / **Switch to Time Clock**) in the header bar or choose **View -> Earnings View** from the top menu bar.
+- Your active clock, ticking timer, and selected task persist uninterrupted across view switches.
+
+### Logging Earnings for Tasks
+You can record earnings directly for any task from either view:
+1. In the **Tasks** panel, select the task and click **Add Earnings...** (or choose **Advanced -> Add Earnings...**).
+2. In the modal dialog:
+   - **Task**: Select the task from the dropdown (defaults to the currently selected task or automatically provides a default task if none exist yet).
+   - **Earnings Amount**: Enter the monetary amount earned (e.g., `150.00`).
+   - **Date Earned**: Select the year, month, and day using the date picker dropdowns or click **Pick Date...** to choose directly from an interactive calendar popup (defaults to today's date).
+   - **Note**: Optionally add notes describing the milestone or payment.
+3. Click **Save**. The entry is recorded and period statistics recompute instantly.
+
+### Setting Monthly Goals & 4-Week Month Option
+1. Switch to the **Earnings View** and click **Set Monthly Goal...**.
+2. In the modal dialog:
+   - **Monthly Target Amount**: Enter your target earnings for the month (e.g., `3000.00`).
+   - **4-Week Month Option**: Check **Use 4-week month (28-day target horizon)** if you operate on 4-week budgeting or billing cycles.
+     - When enabled, target requirements are calculated across the first 28 days of the month, while total earnings continue to be tracked for the full calendar month.
+3. Click **Save Goal**.
+
+### Dynamic Daily Needed Metric
+The Earnings view displays how much money you need to make per remaining day in your target period:
+$$\text{Needed Per Day} = \max\left(0, \frac{\text{Goal Amount} - \text{Current Month Earnings}}{\text{Remaining Target Days}}\right)$$
+This statistic is recalculated dynamically each day and automatically adjusts whenever earnings are logged or deleted. Once your monthly goal is reached, the metric displays `Goal Met! 🎉`.
+
+### Visual Milestone Progress Bars & Cycle Pace Markers
+The Earnings view displays real-time progress bars for:
+- **Daily Progress**: Tracks today's earnings against the daily target.
+- **Weekly Progress**: Tracks the current calendar week's earnings against the weekly milestone target.
+- **Monthly Progress**: Tracks total month earnings against the overall monthly goal.
+
+#### Cycle Pace Markers & Status Feedback
+When a target goal is configured, the weekly and monthly milestone progress bars display a high-contrast visual vertical pace marker indicating where your earnings should be at the current point in the cycle:
+- **Weekly Pace Marker**: Marks the expected pacing position for the current day in the 7-day week (Monday through Sunday).
+- **Monthly Pace Marker**: Marks the target pacing position for the current active day across your selected cycle horizon (standard calendar month or 28-day billing cycle).
+- **Ahead / Behind Pacing Feedback**: Milestone labels provide real-time status feedback showing your target pacing percentage, current cycle day, and dollar delta (e.g. `+$50.00 ahead` or `-$25.00 behind`, or `On track`).
+- **Goal Reached**: When you meet or exceed your monthly goal, the daily needed metric and progress displays celebrate your achievement with `Goal Met! 🎉`.
+
+### Earnings History Ledger
+Review and manage all recorded earnings transactions in the ledger table at the bottom of the Earnings view. Select any row and click **Delete Entry** to remove incorrect records with automatic recalculation.
 
 ---
 
