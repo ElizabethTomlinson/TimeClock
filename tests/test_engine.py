@@ -210,20 +210,68 @@ class TestTimeClockEngine(unittest.TestCase):
         self.bus.subscribe(EventType.TASK_REPORTED, lambda e: reported_events.append(e))
         self.bus.subscribe(EventType.EARNING_ADDED, lambda e: earning_events.append(e))
 
-        # Successful combined reporting
-        updated_task, entry = self.engine.mark_task_reported_with_earning(
+        # Add sessions completed today
+        entry = TimeEntry(
+            id="e1",
+            start_time="2026-10-10T10:00:00",
+            end_time="2026-10-10T12:00:00",
+            duration_seconds=7200.0,
+        )
+        task.entries.append(entry)
+        self.engine._save_state()
+        self.assertEqual(self.engine.get_task_unreported_duration(task.id), 7200.0)
+
+        # 1. Successful combined reporting with explicit reported_at
+        updated_task, entry_res = self.engine.mark_task_reported_with_earning(
             task_id=task.id,
             amount=250.0,
-            earned_at="2026-10-10T14:00:00",
+            earned_at="2026-10-10T00:00:00",
             note="Milestone 1",
             reported_at="2026-10-10T14:00:00",
         )
-        self.assertEqual(entry.amount, 250.0)
-        self.assertEqual(entry.task_id, task.id)
-        self.assertEqual(entry.note, "Milestone 1")
+        self.assertEqual(entry_res.amount, 250.0)
+        self.assertEqual(entry_res.task_id, task.id)
+        self.assertEqual(entry_res.note, "Milestone 1")
         self.assertEqual(updated_task.last_reported_at, "2026-10-10T14:00:00")
+        self.assertEqual(self.engine.get_task_unreported_duration(task.id), 0.0)
         self.assertEqual(len(reported_events), 1)
         self.assertEqual(len(earning_events), 1)
+
+        # 2. Combined reporting without reported_at defaults cutoff to iso_now(), not earned_at
+        task.entries.append(
+            TimeEntry(
+                id="e2",
+                start_time="2026-10-10T15:00:00",
+                end_time="2026-10-10T16:00:00",
+                duration_seconds=3600.0,
+            )
+        )
+        self.engine._save_state()
+        self.assertEqual(self.engine.get_task_unreported_duration(task.id), 3600.0)
+
+        # Even with past date earned_at, cutoff defaults to now and zeros out unreported duration
+        updated_task2, entry_res2 = self.engine.mark_task_reported_with_earning(
+            task_id=task.id,
+            amount=150.0,
+            earned_at="2026-10-01T00:00:00",
+            note="Past date earning",
+        )
+        self.assertEqual(entry_res2.earned_at, "2026-10-01T00:00:00")
+        self.assertNotEqual(updated_task2.last_reported_at, "2026-10-01T00:00:00")
+        self.assertEqual(self.engine.get_task_unreported_duration(task.id), 0.0)
+
+        # 3. Running session test with mark_task_reported_with_earning
+        self.engine.select_task(task.id)
+        self.engine.clock_in()
+        # Immediately reporting with earning sets cutoff to now, zeroing past duration
+        updated_task3, entry_res3 = self.engine.mark_task_reported_with_earning(
+            task_id=task.id,
+            amount=100.0,
+        )
+        self.assertIsNotNone(updated_task3.last_reported_at)
+        # Running duration since last_reported_at is minimal (<= 1s)
+        self.assertAlmostEqual(self.engine.get_task_unreported_duration(task.id), 0.0, delta=1.0)
+        self.engine.clock_out()
 
         # Unpaid task rejection
         unpaid = self.engine.create_task("Unpaid Internal", is_unpaid=True)

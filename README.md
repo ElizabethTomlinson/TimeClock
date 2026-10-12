@@ -251,15 +251,21 @@ Time Clock includes a dedicated **Earnings View** and seamless earnings logging 
 - Your active clock, ticking timer, and selected task persist uninterrupted across view switches.
 
 ### Logging Earnings for Tasks
-You can record earnings directly for any task from either view:
-1. In the **Tasks** panel, select the task and click **Add Earnings...** (or choose **Advanced -> Add Earnings...**, or choose **Mark Reported & Add Earnings...** from the reporting menu).
-2. In the modal dialog:
-   - **Task**: Select the task from the dropdown (defaults to the currently selected task or automatically provides a default task if none exist yet).
+You can open the **Add Earnings** dialog in several ways:
+- **Add Earnings...** button in the **Tasks** panel.
+- **Advanced -> Add Earnings...** in the top menu bar.
+- **Add Earnings...** button in the **Earnings View**.
+- **Report...** (Tasks panel) or **Mark Reported** (Clock Tracker): opens the same dialog with **Mark task as reported** already checked.
+
+In the dialog:
+   - **Task**: Choose the task from the dropdown (the selected or active task is preselected).
    - **Earnings Amount**: Enter the monetary amount earned (e.g., `150.00`).
-   - **Date Earned**: Select the year, month, and day using the date picker dropdowns or click **Pick Date...** to choose directly from an interactive calendar popup (defaults to today's date).
-   - **Note**: Optionally add notes describing the milestone or payment.
-   - **Mark task as reported**: Check or uncheck this option to simultaneously update the task's reporting cutoff timestamp to the earned date (pre-checked when opened from the reporting menu; automatically disabled for unpaid tasks).
-3. Click **Save**. The entry is recorded, reporting cutoffs update, and period statistics recompute instantly.
+   - **Date Earned**: Pick the year, month, and day from the dropdowns (defaults to today), or click **📅 Pick Date...** to choose from a calendar.
+   - **Note**: Optionally add notes.
+   - **Mark task as reported**: Pre-checked only when opened via **Report...** / **Mark Reported**; otherwise check it yourself if desired. When checked, all work up to the moment you click **Save** is marked as reported (unreported time resets to `00:00:00`), regardless of the earned date.
+   - **Advanced...**: Additional reporting actions (see [Managing Reported vs. Unreported Time](#managing-reported-vs-unreported-time)).
+
+Click **Save**. The entry is recorded, and period statistics recompute instantly. For unpaid tasks, the reporting checkbox and **Advanced...** are disabled.
 
 ### Setting Monthly Goals & 4-Week Month Option
 1. Switch to the **Earnings View** and click **Set Monthly Goal...**.
@@ -362,22 +368,21 @@ When logging hours for client billing, contractor timesheets, or sprint reportin
 - **Unreported Time**: The duration of work completed *after* your last reporting cutoff timestamp.
 
 ### Marking Time as Reported
-Click the **Report...** button in the Tasks panel (or **Mark Reported** in the Clock Tracker panel) to access the reporting menu:
+Click the **Report...** button in the Tasks panel (or **Mark Reported** in the Clock Tracker panel) to open the **Add Earnings** dialog pre-configured to mark your task as reported.
 
-1. **Mark as Reported Now**:
-   - Sets the cutoff timestamp to the current moment.
-   - Marks all sessions completed up to this point as reported.
-   - Resets the task's **Unreported Time** counter to zero while keeping the **Total Time** intact.
+#### Advanced Reporting Options
+Within the **Add Earnings** dialog, click the **Advanced...** button to access non-monetary reporting utilities. Each action applies to the task selected in the dialog and closes the dialog immediately, without saving any earnings amount or note you entered. **Advanced...** is disabled for unpaid tasks.
 
-2. **Mark Reported & Add Earnings...**:
-   - Opens the **Add Earnings** dialog with the selected task and the reporting checkbox pre-selected.
-   - Allows recording the payment received while simultaneously advancing the task's reporting cutoff to the earned date.
+1. **Mark as Reported Now (No Earnings)**:
+   - Sets the reporting cutoff timestamp to the current moment.
+   - Marks all sessions completed up to this point as reported without logging monetary earnings.
+   - Resets the task's **Unreported Time** counter to zero.
 
-3. **Custom Timestamp...**:
-   - Allows you to set a specific cutoff date and time in standard ISO format (`YYYY-MM-DDTHH:MM:SS`, e.g., `2026-10-01T17:00:00`).
+2. **Custom Timestamp...**:
+   - Allows you to set a specific cutoff date and time in standard ISO format (`YYYY-MM-DDTHH:MM:SS`).
    - Any sessions that ended at or before that timestamp will be marked as reported; sessions after that timestamp will remain unreported.
 
-4. **Clear Reported Status**:
+3. **Clear Reported Status**:
    - Clears the reporting cutoff for the task.
    - Returns all historical sessions to an unreported state, making your **Unreported Time** equal to your **Total Time**.
 
@@ -437,7 +442,7 @@ To export all tasks (including active and archived projects) and all session rec
 
 - **One Task at a Time**: Select a task before starting work to keep sessions categorized accurately.
 - **Switching Tasks**: When switching projects, click **Clock Out** on the current task, select the new task in the left list, and click **Clock In**.
-- **Weekly or Monthly Reporting**: At the end of each billing cycle or work week, use **Export Data as CSV...** to generate your timesheet report, then click **Mark as Reported Now** to start your next cycle with a clean unreported counter.
+- **Weekly or Monthly Reporting**: At the end of each billing cycle or work week, use **Export Data as CSV...** to generate your timesheet report, then click **Report...**, enter any earnings, and click **Save** (or use **Report... -> Advanced... -> Mark as Reported Now (No Earnings)**) to start your next cycle with a clean unreported counter.
 - **Accidental Exits**: Don't worry about losing running time if your computer restarts or the app is closed — active timers continue running and automatically resume when you reopen the application.
 
 ---
@@ -448,7 +453,7 @@ To export all tasks (including active and archived projects) and all session rec
 Your data is stored locally in an embedded database file (`data/time_clock.db`) inside the application directory. No account creation or internet connection is required.
 
 #### What happens if I forget to clock out?
-If you leave a session running, you can clock out when you return. If you need to mark specific hours as already reported up to an earlier time, use **Report... -> Custom Timestamp...** to set the exact cutoff moment.
+If you leave a session running, you can clock out when you return. If you need to mark specific hours as already reported up to an earlier time, use **Report... -> Advanced... -> Custom Timestamp...** to set the exact cutoff moment.
 
 #### Can I export to Excel?
 Yes! Export your data as a `.csv` file via the **File -> Export Data as CSV...** menu or the history **Export...** button. You can open `.csv` files directly in Microsoft Excel, Google Sheets, LibreOffice Calc, or Apple Numbers.

@@ -11,7 +11,7 @@ from time_clock.gui.add_earnings_dialog import AddEarningsDialog
 from time_clock.gui.edit_session_dialog import EditClockInOutDialog
 from time_clock.gui.prompt_dialog import ask_string
 from time_clock.gui.task_options_dialog import ask_task_options
-from time_clock.models import Task, format_duration, iso_now, parse_iso
+from time_clock.models import Task, format_duration
 
 
 class TaskPanel(ttk.LabelFrame):
@@ -107,7 +107,7 @@ class TaskPanel(ttk.LabelFrame):
         earnings_btn = ttk.Button(btn_frame, text="Add Earnings...", command=self._on_add_earnings)
         earnings_btn.pack(side=tk.LEFT, padx=(0, 4), expand=True, fill=tk.X)
 
-        self.report_btn = ttk.Button(btn_frame, text="Report...", command=self._on_mark_reported_menu)
+        self.report_btn = ttk.Button(btn_frame, text="Report...", command=self._on_report_clicked)
         self.report_btn.pack(side=tk.LEFT, padx=(0, 4), expand=True, fill=tk.X)
 
         self.archive_btn = ttk.Button(btn_frame, text="Archive", command=self._on_archive_toggle_clicked)
@@ -261,7 +261,7 @@ class TaskPanel(ttk.LabelFrame):
             initial_task_id=target_id,
         )
 
-    def _on_mark_reported_menu(self) -> None:
+    def _on_report_clicked(self) -> None:
         selection = self.tree.selection()
         if not selection:
             messagebox.showinfo("Select Task", "Please select a task first.", parent=self.winfo_toplevel())
@@ -274,74 +274,12 @@ class TaskPanel(ttk.LabelFrame):
             messagebox.showinfo("Unpaid Task", "Unpaid tasks do not track reported time.", parent=self.winfo_toplevel())
             return
 
-        menu = tk.Menu(self, tearoff=0)
-        menu.add_command(label="Mark as Reported Now", command=lambda: self._mark_reported_now(task_id))
-        menu.add_command(label="Mark Reported & Add Earnings...", command=lambda: self._mark_reported_with_earnings(task_id))
-        menu.add_command(label="Custom Timestamp...", command=lambda: self._mark_reported_custom(task_id))
-        menu.add_command(label="Clear Reported Status", command=lambda: self._clear_reported_status(task_id))
-
-        try:
-            x = self.report_btn.winfo_rootx()
-            y = self.report_btn.winfo_rooty() + self.report_btn.winfo_height()
-            menu.tk_popup(x, y)
-        finally:
-            menu.grab_release()
-
-    def _mark_reported_now(self, task_id: str) -> None:
-        task = self.engine.get_task(task_id)
-        if not task or task.is_unpaid:
-            return
-        try:
-            self.engine.mark_task_reported(task_id)
-        except Exception as e:
-            messagebox.showerror("Error", str(e), parent=self.winfo_toplevel())
-
-    def _mark_reported_with_earnings(self, task_id: str) -> None:
-        task = self.engine.get_task(task_id)
-        if not task or task.is_unpaid:
-            return
         AddEarningsDialog(
             parent=self.winfo_toplevel(),
             engine=self.engine,
             initial_task_id=task_id,
             mark_reported=True,
         )
-
-    def _mark_reported_custom(self, task_id: str) -> None:
-        task = self.engine.get_task(task_id)
-        if not task or task.is_unpaid:
-            return
-        initial = task.last_reported_at or iso_now()
-        ts = ask_string(
-            "Reported Cutoff Timestamp",
-            "Enter ISO-8601 timestamp (e.g. 2026-10-01T09:00:00):",
-            initialvalue=initial,
-            parent=self.winfo_toplevel(),
-        )
-        if ts and ts.strip():
-            clean_ts = ts.strip()
-            try:
-                parse_iso(clean_ts)
-            except Exception:
-                messagebox.showerror(
-                    "Invalid Timestamp",
-                    f"'{clean_ts}' is not a valid ISO timestamp format.\nExample: 2026-10-01T09:00:00",
-                    parent=self.winfo_toplevel(),
-                )
-                return
-            try:
-                self.engine.mark_task_reported(task_id, clean_ts)
-            except Exception as e:
-                messagebox.showerror("Error", str(e), parent=self.winfo_toplevel())
-
-    def _clear_reported_status(self, task_id: str) -> None:
-        task = self.engine.get_task(task_id)
-        if not task or task.is_unpaid:
-            return
-        try:
-            self.engine.clear_task_reported(task_id)
-        except Exception as e:
-            messagebox.showerror("Error", str(e), parent=self.winfo_toplevel())
 
     def _on_delete_task(self) -> None:
         selection = self.tree.selection()

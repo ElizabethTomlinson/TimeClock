@@ -10,7 +10,7 @@ from unittest.mock import patch
 
 from time_clock.engine import TimeClockEngine
 from time_clock.events import EventBus, EventType
-from time_clock.models import EarningEntry, EarningsPeriodStats, MonthlyGoal
+from time_clock.models import EarningEntry, EarningsPeriodStats, MonthlyGoal, TimeEntry
 from time_clock.storage import SQLiteStorage
 
 
@@ -158,17 +158,64 @@ class TestEngineEarningsCalculations(unittest.TestCase):
         self.event_bus.subscribe(EventType.TASK_REPORTED, lambda e: reported_events.append(e))
         self.event_bus.subscribe(EventType.EARNING_ADDED, lambda e: earning_events.append(e))
 
+        # Add session completed today to verify unreported duration reset
+        self.task.entries.append(
+            TimeEntry(
+                id="e1",
+                start_time="2026-10-12T08:00:00",
+                end_time="2026-10-12T09:00:00",
+                duration_seconds=3600.0,
+            )
+        )
+        self.engine._save_state()
+        self.assertEqual(self.engine.get_task_unreported_duration(self.task.id), 3600.0)
+
+        # 1. Without reported_at: last_reported_at defaults to current time (iso_now()), resetting unreported duration
         task, earning = self.engine.mark_task_reported_with_earning(
             task_id=self.task.id,
             amount=450.0,
-            earned_at="2026-10-12T09:30:00",
+            earned_at="2026-10-12T00:00:00",
             note="Consulting Milestone",
         )
         self.assertEqual(earning.amount, 450.0)
         self.assertEqual(earning.task_id, self.task.id)
-        self.assertEqual(task.last_reported_at, "2026-10-12T09:30:00")
+        self.assertEqual(earning.earned_at, "2026-10-12T00:00:00")
+        self.assertIsNotNone(task.last_reported_at)
+        self.assertEqual(self.engine.get_task_unreported_duration(self.task.id), 0.0)
         self.assertEqual(len(reported_events), 1)
         self.assertEqual(len(earning_events), 1)
+
+        # 2. With earlier earned_at date (e.g. earned 10 days ago), unreported duration still resets to 0.0
+        task2 = self.engine.create_task("Task for Backdated Earning")
+        task2.entries.append(
+            TimeEntry(
+                id="e2",
+                start_time="2026-10-12T10:00:00",
+                end_time="2026-10-12T11:00:00",
+                duration_seconds=3600.0,
+            )
+        )
+        self.engine._save_state()
+        self.assertEqual(self.engine.get_task_unreported_duration(task2.id), 3600.0)
+
+        task2_res, earning2 = self.engine.mark_task_reported_with_earning(
+            task_id=task2.id,
+            amount=200.0,
+            earned_at="2026-10-01T00:00:00",
+            note="Backdated payment",
+        )
+        self.assertEqual(earning2.earned_at, "2026-10-01T00:00:00")
+        self.assertEqual(self.engine.get_task_unreported_duration(task2.id), 0.0)
+
+        # 3. With explicit reported_at cutoff
+        task3 = self.engine.create_task("Task with Explicit Cutoff")
+        task3_res, earning3 = self.engine.mark_task_reported_with_earning(
+            task_id=task3.id,
+            amount=100.0,
+            earned_at="2026-10-01T00:00:00",
+            reported_at="2026-10-12T15:00:00",
+        )
+        self.assertEqual(task3_res.last_reported_at, "2026-10-12T15:00:00")
 
         # Unpaid task error
         unpaid = self.engine.create_task("Unpaid Chore", is_unpaid=True)
@@ -520,6 +567,18 @@ class TestAddEarningsDialogGUI(unittest.TestCase):
     def test_add_earnings_dialog_mark_reported_integration(self) -> None:
         from time_clock.gui.add_earnings_dialog import AddEarningsDialog
 
+        # Add completed sessions to task
+        self.task.entries.append(
+            TimeEntry(
+                id="e1",
+                start_time="2026-10-12T08:00:00",
+                end_time="2026-10-12T10:00:00",
+                duration_seconds=7200.0,
+            )
+        )
+        self.engine._save_state()
+        self.assertEqual(self.engine.get_task_unreported_duration(self.task.id), 7200.0)
+
         # 1. Open with mark_reported=True on a paid task
         dialog = AddEarningsDialog(
             parent=self.root,
@@ -535,9 +594,11 @@ class TestAddEarningsDialogGUI(unittest.TestCase):
         earnings = self.engine.get_earnings()
         self.assertEqual(len(earnings), 1)
         self.assertEqual(earnings[0].amount, 500.0)
+        self.assertTrue(earnings[0].earned_at.startswith("2026-10-12"))
         task = self.engine.get_task(self.task.id)
         self.assertIsNotNone(task.last_reported_at)
-        self.assertTrue(task.last_reported_at.startswith("2026-10-12"))
+        # Reporting zeroes out unreported duration even if financial date is midnight / earlier
+        self.assertEqual(self.engine.get_task_unreported_duration(self.task.id), 0.0)
 
     def test_add_earnings_dialog_unpaid_task_mark_reported_disabled(self) -> None:
         from time_clock.gui.add_earnings_dialog import AddEarningsDialog
@@ -580,6 +641,258 @@ class TestAddEarningsDialogGUI(unittest.TestCase):
         dialog2._on_task_changed()
         self.assertFalse(dialog2.mark_reported_var.get())
         self.assertEqual(str(dialog2.mark_reported_check.cget("state")), "disabled")
+        self.assertEqual(str(dialog2.advanced_btn.cget("state")), "disabled")
+
+    def test_add_earnings_dialog_advanced_mark_reported_now(self) -> None:
+        from time_clock.gui.add_earnings_dialog import AddEarningsDialog
+
+        self.task.entries.append(
+            TimeEntry(
+                id="e1",
+                start_time="2026-10-12T08:00:00",
+                end_time="2026-10-12T10:00:00",
+                duration_seconds=7200.0,
+            )
+        )
+        self.engine._save_state()
+        self.assertEqual(self.engine.get_task_unreported_duration(self.task.id), 7200.0)
+
+        dialog = AddEarningsDialog(
+            parent=self.root,
+            engine=self.engine,
+            initial_task_id=self.task.id,
+        )
+        self.assertEqual(str(dialog.advanced_btn.cget("state")), "normal")
+
+        # Execute "Mark as Reported Now (No Earnings)"
+        dialog._on_mark_reported_now()
+
+        # Last reported should be updated, unreported time zeroed, no monetary earnings created
+        task = self.engine.get_task(self.task.id)
+        self.assertIsNotNone(task.last_reported_at)
+        self.assertEqual(self.engine.get_task_unreported_duration(self.task.id), 0.0)
+        self.assertEqual(len(self.engine.get_earnings()), 0)
+        self.assertEqual(dialog.winfo_exists(), 0)
+
+    @patch("time_clock.gui.add_earnings_dialog.ask_string")
+    def test_add_earnings_dialog_advanced_custom_timestamp(self, mock_ask) -> None:
+        from time_clock.gui.add_earnings_dialog import AddEarningsDialog
+
+        self.task.entries.append(
+            TimeEntry(
+                id="e1",
+                start_time="2026-10-12T08:00:00",
+                end_time="2026-10-12T10:00:00",
+                duration_seconds=7200.0,
+            )
+        )
+        self.engine._save_state()
+
+        mock_ask.return_value = "2026-10-12T09:00:00"
+        dialog = AddEarningsDialog(
+            parent=self.root,
+            engine=self.engine,
+            initial_task_id=self.task.id,
+        )
+
+        dialog._on_mark_reported_custom()
+        task = self.engine.get_task(self.task.id)
+        self.assertEqual(task.last_reported_at, "2026-10-12T09:00:00")
+        self.assertEqual(self.engine.get_task_unreported_duration(self.task.id), 3600.0)
+        self.assertEqual(dialog.winfo_exists(), 0)
+
+    @patch("time_clock.gui.add_earnings_dialog.messagebox.showerror")
+    @patch("time_clock.gui.add_earnings_dialog.ask_string")
+    def test_add_earnings_dialog_advanced_custom_timestamp_invalid_and_cancel(
+        self, mock_ask, mock_error
+    ) -> None:
+        from unittest.mock import patch
+
+        from time_clock.gui.add_earnings_dialog import AddEarningsDialog
+
+        with patch("tkinter.Toplevel.grab_set") as mock_grab_set:
+            dialog = AddEarningsDialog(
+                parent=self.root,
+                engine=self.engine,
+                initial_task_id=self.task.id,
+            )
+
+            # Invalid, blank, and cancelled prompts keep the modal dialog open.
+            mock_ask.return_value = "invalid-date-format"
+            dialog._on_mark_reported_custom()
+            mock_error.assert_called_once()
+            self.assertEqual(dialog.winfo_exists(), 1)
+            self.assertIsNone(self.engine.get_task(self.task.id).last_reported_at)
+
+            mock_ask.return_value = "   "
+            dialog._on_mark_reported_custom()
+            self.assertEqual(dialog.winfo_exists(), 1)
+
+            mock_ask.return_value = None
+            dialog._on_mark_reported_custom()
+            self.assertEqual(dialog.winfo_exists(), 1)
+            self.assertIsNone(self.engine.get_task(self.task.id).last_reported_at)
+            self.assertEqual(mock_grab_set.call_count, 4)
+
+    @patch("time_clock.gui.add_earnings_dialog.messagebox.showerror")
+    @patch("time_clock.gui.add_earnings_dialog.ask_string", return_value="2026-10-12T09:00:00")
+    def test_add_earnings_dialog_advanced_engine_errors_keep_dialog_open(
+        self, mock_ask, mock_error
+    ) -> None:
+        from time_clock.gui.add_earnings_dialog import AddEarningsDialog
+
+        actions = (
+            ("mark_task_reported", "_on_mark_reported_now"),
+            ("mark_task_reported", "_on_mark_reported_custom"),
+            ("clear_task_reported", "_on_clear_reported_status"),
+        )
+        for engine_method, handler_name in actions:
+            with self.subTest(handler=handler_name):
+                dialog = AddEarningsDialog(
+                    parent=self.root,
+                    engine=self.engine,
+                    initial_task_id=self.task.id,
+                )
+                with patch.object(self.engine, engine_method, side_effect=RuntimeError("engine failure")):
+                    getattr(dialog, handler_name)()
+
+                mock_error.assert_called_with("Error", "engine failure", parent=dialog)
+                self.assertEqual(dialog.winfo_exists(), 1)
+                mock_error.reset_mock()
+
+    def test_add_earnings_dialog_advanced_clear_reported_status(self) -> None:
+        from time_clock.gui.add_earnings_dialog import AddEarningsDialog
+
+        self.engine.mark_task_reported(self.task.id, "2026-10-12T08:00:00")
+        self.assertIsNotNone(self.engine.get_task(self.task.id).last_reported_at)
+
+        dialog = AddEarningsDialog(
+            parent=self.root,
+            engine=self.engine,
+            initial_task_id=self.task.id,
+        )
+
+        dialog._on_clear_reported_status()
+        task = self.engine.get_task(self.task.id)
+        self.assertIsNone(task.last_reported_at)
+        self.assertEqual(dialog.winfo_exists(), 0)
+
+    @patch("time_clock.gui.add_earnings_dialog.ask_string", return_value="2026-10-12T09:00:00")
+    def test_add_earnings_dialog_advanced_button_menu_wiring_and_selected_task(self, mock_ask) -> None:
+        import tkinter as tk
+
+        from time_clock.gui.add_earnings_dialog import AddEarningsDialog
+
+        other_task = self.engine.create_task("Other Selected Task")
+        self.engine.mark_task_reported(self.task.id, "2026-10-12T07:00:00")
+        self.engine.mark_task_reported(other_task.id, "2026-10-12T08:00:00")
+        original_task_cutoff = self.engine.get_task(self.task.id).last_reported_at
+        reported_events = []
+        self.event_bus.subscribe(EventType.TASK_REPORTED, reported_events.append)
+
+        expected_labels = [
+            "Mark as Reported Now (No Earnings)",
+            "Custom Timestamp...",
+            "Clear Reported Status",
+        ]
+        labels_seen = []
+
+        def invoke_menu_entry(menu, _x, _y):
+            labels = [menu.entrycget(index, "label") for index in range(menu.index("end") + 1)]
+            labels_seen.append(labels)
+            menu.invoke(len(labels_seen) - 1)
+
+        for index in range(len(expected_labels)):
+            dialog = AddEarningsDialog(
+                parent=self.root,
+                engine=self.engine,
+                initial_task_id=self.task.id,
+            )
+            selected_display = next(
+                display for display, task_id in dialog.task_map.items() if task_id == other_task.id
+            )
+            dialog.task_var.set(selected_display)
+            dialog._on_task_changed()
+
+            with patch.object(tk.Menu, "tk_popup", new=invoke_menu_entry):
+                dialog.advanced_btn.invoke()
+
+            self.assertEqual(labels_seen[-1], expected_labels)
+            self.assertEqual(dialog.winfo_exists(), 0)
+            selected_task_cutoff = self.engine.get_task(other_task.id).last_reported_at
+            if index == 0:
+                self.assertIsNotNone(selected_task_cutoff)
+                self.assertNotEqual(selected_task_cutoff, "2026-10-12T08:00:00")
+            elif index == 1:
+                self.assertEqual(selected_task_cutoff, "2026-10-12T09:00:00")
+            else:
+                self.assertIsNone(selected_task_cutoff)
+            self.assertEqual(self.engine.get_task(self.task.id).last_reported_at, original_task_cutoff)
+            self.assertEqual(len(self.engine.get_earnings()), 0)
+        self.assertEqual(len(reported_events), 3)
+
+    @patch("time_clock.gui.add_earnings_dialog.messagebox.showwarning")
+    @patch("time_clock.gui.add_earnings_dialog.messagebox.showinfo")
+    def test_add_earnings_dialog_advanced_menu_guards_invalid_and_unpaid_selection(
+        self, mock_info, mock_warning
+    ) -> None:
+        import tkinter as tk
+
+        from time_clock.gui.add_earnings_dialog import AddEarningsDialog
+
+        unpaid = self.engine.create_task("Unpaid Advanced Task", is_unpaid=True)
+        dialog = AddEarningsDialog(
+            parent=self.root,
+            engine=self.engine,
+            initial_task_id=self.task.id,
+        )
+
+        with patch.object(tk.Menu, "tk_popup") as mock_popup:
+            dialog.task_var.set("invalid selection")
+            dialog.advanced_btn.invoke()
+            mock_warning.assert_called_once()
+            mock_popup.assert_not_called()
+
+            unpaid_display = next(
+                display for display, task_id in dialog.task_map.items() if task_id == unpaid.id
+            )
+            dialog.task_var.set(unpaid_display)
+            dialog._on_task_changed()
+            self.assertEqual(str(dialog.advanced_btn.cget("state")), "disabled")
+            dialog._on_advanced_menu()
+            mock_info.assert_called_once()
+            mock_popup.assert_not_called()
+
+        self.assertIsNone(self.engine.get_task(unpaid.id).last_reported_at)
+        self.assertEqual(dialog.winfo_exists(), 1)
+
+    @patch("time_clock.gui.add_earnings_dialog.messagebox.showinfo")
+    def test_add_earnings_dialog_advanced_unpaid_task_guards(self, mock_info) -> None:
+        from time_clock.gui.add_earnings_dialog import AddEarningsDialog
+
+        unpaid = self.engine.create_task("Unpaid Task Advanced", is_unpaid=True)
+
+        dialog = AddEarningsDialog(
+            parent=self.root,
+            engine=self.engine,
+            initial_task_id=unpaid.id,
+        )
+        self.assertEqual(str(dialog.advanced_btn.cget("state")), "disabled")
+
+        # Direct invocation guards
+        dialog._on_mark_reported_now()
+        mock_info.assert_called_once()
+        self.assertIsNone(self.engine.get_task(unpaid.id).last_reported_at)
+
+        mock_info.reset_mock()
+        dialog._on_mark_reported_custom()
+        mock_info.assert_called_once()
+        self.assertIsNone(self.engine.get_task(unpaid.id).last_reported_at)
+
+        mock_info.reset_mock()
+        dialog._on_clear_reported_status()
+        mock_info.assert_called_once()
+        self.assertIsNone(self.engine.get_task(unpaid.id).last_reported_at)
 
     def test_calendar_picker_dialog(self) -> None:
         from datetime import date

@@ -851,21 +851,42 @@ class TestGUI(unittest.TestCase):
         self.assertEqual(str(app.task_panel.report_btn.cget("state")), "normal")
         self.assertEqual(str(app.clock_panel.report_btn.cget("state")), "normal")
 
-    def test_unpaid_task_mark_reported_guards(self):
+    @patch("time_clock.gui.task_panel.messagebox.showinfo")
+    @patch("time_clock.gui.clock_panel.AddEarningsDialog")
+    @patch("time_clock.gui.task_panel.AddEarningsDialog")
+    def test_unpaid_task_mark_reported_guards(
+        self, mock_task_dialog, mock_clock_dialog, mock_info
+    ):
         app = TimeClockApp(root=self.root, engine=self.engine)
         unpaid_task = self.engine.create_task("Unpaid Guard Task", is_unpaid=True)
         self.engine.select_task(unpaid_task.id)
         self.root.update_idletasks()
 
-        # Attempt to mark reported through panel actions on unpaid task
-        app.task_panel._mark_reported_now(unpaid_task.id)
+        # Invoke the commands directly even though unpaid-task state disables the buttons.
+        app.task_panel.report_btn.configure(state="normal")
+        app.task_panel.report_btn.invoke()
+        mock_task_dialog.assert_not_called()
+        mock_info.assert_called_once()
         self.assertIsNone(unpaid_task.last_reported_at)
 
-        app.clock_panel._mark_reported_now()
+        app.clock_panel.report_btn.configure(state="normal")
+        app.clock_panel.report_btn.invoke()
+        mock_clock_dialog.assert_not_called()
+        self.assertEqual(mock_info.call_count, 2)
         self.assertIsNone(unpaid_task.last_reported_at)
 
-        app.task_panel._clear_reported_status(unpaid_task.id)
-        self.assertIsNone(unpaid_task.last_reported_at)
+    @patch("time_clock.gui.task_panel.messagebox.showinfo")
+    def test_report_buttons_show_info_without_selection(self, mock_info):
+        app = TimeClockApp(root=self.root, engine=self.engine)
+
+        # Both controls are normally disabled with no task; enable them to exercise guards.
+        app.task_panel.report_btn.configure(state="normal")
+        app.task_panel.report_btn.invoke()
+        mock_info.assert_called_once()
+
+        app.clock_panel.report_btn.configure(state="normal")
+        app.clock_panel.report_btn.invoke()
+        self.assertEqual(mock_info.call_count, 2)
 
     @patch.object(TaskOptionsDialog, "wait_window")
     def test_task_options_dialog_dimensions(self, mock_wait):
@@ -1162,19 +1183,22 @@ class TestGUI(unittest.TestCase):
         self.assertIn("No Goal Set", panel.month_text_var.get())
         panel.destroy()
 
+    @patch("time_clock.gui.clock_panel.messagebox.showinfo")
     @patch("time_clock.gui.clock_panel.AddEarningsDialog")
-    def test_clock_panel_mark_reported_with_earnings(self, mock_dialog):
+    def test_clock_panel_mark_reported_with_earnings(self, mock_dialog, mock_info):
         app = TimeClockApp(root=self.root, engine=self.engine)
         task = self.engine.create_task("Report with Earn Task")
+        self.engine.select_task(task.id)
         self.root.update_idletasks()
 
-        app.clock_panel._mark_reported_with_earnings()
+        app.clock_panel.report_btn.invoke()
         mock_dialog.assert_called_once_with(
             parent=self.root,
             engine=self.engine,
             initial_task_id=task.id,
             mark_reported=True,
         )
+        mock_info.assert_not_called()
 
         # Unpaid task guard
         mock_dialog.reset_mock()
@@ -1182,30 +1206,38 @@ class TestGUI(unittest.TestCase):
         self.engine.select_task(unpaid.id)
         self.root.update_idletasks()
 
-        app.clock_panel._mark_reported_with_earnings()
+        app.clock_panel.report_btn.configure(state="normal")
+        app.clock_panel.report_btn.invoke()
         mock_dialog.assert_not_called()
+        mock_info.assert_called_once()
 
+    @patch("time_clock.gui.task_panel.messagebox.showinfo")
     @patch("time_clock.gui.task_panel.AddEarningsDialog")
-    def test_task_panel_mark_reported_with_earnings(self, mock_dialog):
+    def test_task_panel_mark_reported_with_earnings(self, mock_dialog, mock_info):
         app = TimeClockApp(root=self.root, engine=self.engine)
         task = self.engine.create_task("Task Panel Earn Task")
+        self.engine.select_task(task.id)
         self.root.update_idletasks()
 
-        app.task_panel._mark_reported_with_earnings(task.id)
+        app.task_panel.report_btn.invoke()
         mock_dialog.assert_called_once_with(
             parent=self.root,
             engine=self.engine,
             initial_task_id=task.id,
             mark_reported=True,
         )
+        mock_info.assert_not_called()
 
         # Unpaid task guard
         mock_dialog.reset_mock()
         unpaid = self.engine.create_task("Task Panel Unpaid", is_unpaid=True)
         self.root.update_idletasks()
 
-        app.task_panel._mark_reported_with_earnings(unpaid.id)
+        app.task_panel.tree.selection_set(unpaid.id)
+        app.task_panel.report_btn.configure(state="normal")
+        app.task_panel.report_btn.invoke()
         mock_dialog.assert_not_called()
+        mock_info.assert_called_once()
 
 
 if __name__ == "__main__":

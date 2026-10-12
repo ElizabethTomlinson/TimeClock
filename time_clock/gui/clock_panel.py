@@ -8,8 +8,7 @@ from typing import Optional
 from time_clock.engine import TimeClockEngine
 from time_clock.events import Event, EventType
 from time_clock.gui.add_earnings_dialog import AddEarningsDialog
-from time_clock.gui.prompt_dialog import ask_string
-from time_clock.models import Task, format_duration, iso_now, parse_iso
+from time_clock.models import Task, format_duration
 
 
 class ClockPanel(ttk.LabelFrame):
@@ -146,7 +145,7 @@ class ClockPanel(ttk.LabelFrame):
         self.report_btn = ttk.Button(
             btn_frame,
             text="Mark Reported",
-            command=self._on_mark_reported_menu,
+            command=self._on_report_clicked,
         )
         self.report_btn.pack(side=tk.RIGHT, fill=tk.X, expand=True, ipady=6)
 
@@ -178,7 +177,7 @@ class ClockPanel(ttk.LabelFrame):
         except Exception as e:
             messagebox.showerror("Error", str(e))
 
-    def _on_mark_reported_menu(self) -> None:
+    def _on_report_clicked(self) -> None:
         active_task = self.engine.get_active_task()
         if not active_task:
             messagebox.showinfo("Select Task", "Please select or create a task first.")
@@ -187,73 +186,12 @@ class ClockPanel(ttk.LabelFrame):
             messagebox.showinfo("Unpaid Task", "Unpaid tasks do not track reported time.")
             return
 
-        menu = tk.Menu(self, tearoff=0)
-        menu.add_command(label="Mark as Reported Now", command=self._mark_reported_now)
-        menu.add_command(label="Mark Reported & Add Earnings...", command=self._mark_reported_with_earnings)
-        menu.add_command(label="Custom Timestamp...", command=self._mark_reported_custom)
-        menu.add_command(label="Clear Reported Status", command=self._clear_reported_status)
-
-        try:
-            x = self.report_btn.winfo_rootx()
-            y = self.report_btn.winfo_rooty() + self.report_btn.winfo_height()
-            menu.tk_popup(x, y)
-        finally:
-            menu.grab_release()
-
-    def _mark_reported_now(self) -> None:
-        active_task = self.engine.get_active_task()
-        if active_task and not active_task.is_unpaid:
-            try:
-                self.engine.mark_task_reported(active_task.id)
-            except Exception as e:
-                messagebox.showerror("Error", str(e), parent=self.winfo_toplevel())
-
-    def _mark_reported_with_earnings(self) -> None:
-        active_task = self.engine.get_active_task()
-        if not active_task or active_task.is_unpaid:
-            return
         AddEarningsDialog(
             parent=self.winfo_toplevel(),
             engine=self.engine,
             initial_task_id=active_task.id,
             mark_reported=True,
         )
-
-    def _mark_reported_custom(self) -> None:
-        active_task = self.engine.get_active_task()
-        if not active_task or active_task.is_unpaid:
-            return
-
-        initial = active_task.last_reported_at or iso_now()
-        ts = ask_string(
-            "Reported Cutoff Timestamp",
-            "Enter ISO-8601 timestamp (e.g. 2026-10-01T09:00:00):",
-            initialvalue=initial,
-            parent=self.winfo_toplevel(),
-        )
-        if ts and ts.strip():
-            clean_ts = ts.strip()
-            try:
-                parse_iso(clean_ts)
-            except Exception:
-                messagebox.showerror(
-                    "Invalid Timestamp",
-                    f"'{clean_ts}' is not a valid ISO timestamp format.\nExample: 2026-10-01T09:00:00",
-                    parent=self.winfo_toplevel(),
-                )
-                return
-            try:
-                self.engine.mark_task_reported(active_task.id, clean_ts)
-            except Exception as e:
-                messagebox.showerror("Error", str(e), parent=self.winfo_toplevel())
-
-    def _clear_reported_status(self) -> None:
-        active_task = self.engine.get_active_task()
-        if active_task and not active_task.is_unpaid:
-            try:
-                self.engine.clear_task_reported(active_task.id)
-            except Exception as e:
-                messagebox.showerror("Error", str(e), parent=self.winfo_toplevel())
 
     def refresh_display(self) -> None:
         """Update all labels and buttons based on current engine state."""

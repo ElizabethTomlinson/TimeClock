@@ -8,7 +8,8 @@ from tkinter import messagebox, ttk
 from typing import Dict, Optional
 
 from time_clock.engine import TimeClockEngine
-from time_clock.models import EarningEntry, parse_iso
+from time_clock.gui.prompt_dialog import ask_string
+from time_clock.models import EarningEntry, Task, iso_now, parse_iso
 
 
 class CalendarPickerDialog(tk.Toplevel):
@@ -336,17 +337,24 @@ class AddEarningsDialog(tk.Toplevel):
         )
         self.mark_reported_check.pack(fill=tk.X, pady=(0, 16))
 
-        self._on_task_changed()
-
         # Action Buttons
         btn_box = ttk.Frame(container)
         btn_box.pack(fill=tk.X)
+
+        self.advanced_btn = ttk.Button(
+            btn_box,
+            text="Advanced...",
+            command=self._on_advanced_menu,
+        )
+        self.advanced_btn.pack(side=tk.LEFT)
 
         cancel_btn = ttk.Button(btn_box, text="Cancel", width=10, command=self._on_cancel)
         cancel_btn.pack(side=tk.RIGHT, padx=(6, 0))
 
         ok_btn = ttk.Button(btn_box, text="Save", width=10, command=self._on_ok)
         ok_btn.pack(side=tk.RIGHT)
+
+        self._on_task_changed()
 
     def _on_task_changed(self, event: Optional[tk.Event] = None) -> None:
         selected_display = self.task_var.get()
@@ -356,9 +364,106 @@ class AddEarningsDialog(tk.Toplevel):
         task = self.engine.get_task(task_id)
         if task and task.is_unpaid:
             self.mark_reported_var.set(False)
-            self.mark_reported_check.configure(state=tk.DISABLED)
+            if hasattr(self, "mark_reported_check"):
+                self.mark_reported_check.configure(state=tk.DISABLED)
+            if hasattr(self, "advanced_btn"):
+                self.advanced_btn.configure(state=tk.DISABLED)
         else:
-            self.mark_reported_check.configure(state=tk.NORMAL)
+            if hasattr(self, "mark_reported_check"):
+                self.mark_reported_check.configure(state=tk.NORMAL)
+            if hasattr(self, "advanced_btn"):
+                self.advanced_btn.configure(state=tk.NORMAL)
+
+    def _get_selected_task(self) -> Optional[Task]:
+        selected_display = self.task_var.get()
+        task_id = self.task_map.get(selected_display)
+        if not task_id:
+            messagebox.showwarning("Warning", "Please select a valid task.", parent=self)
+            return None
+        task = self.engine.get_task(task_id)
+        if not task:
+            messagebox.showwarning("Warning", "Task not found.", parent=self)
+            return None
+        if task.is_unpaid:
+            messagebox.showinfo("Unpaid Task", "Unpaid tasks do not track reported time.", parent=self)
+            return None
+        return task
+
+    def _on_advanced_menu(self) -> None:
+        task = self._get_selected_task()
+        if not task:
+            return
+
+        menu = tk.Menu(self, tearoff=0)
+        menu.add_command(
+            label="Mark as Reported Now (No Earnings)",
+            command=self._on_mark_reported_now,
+        )
+        menu.add_command(
+            label="Custom Timestamp...",
+            command=self._on_mark_reported_custom,
+        )
+        menu.add_command(
+            label="Clear Reported Status",
+            command=self._on_clear_reported_status,
+        )
+
+        try:
+            x = self.advanced_btn.winfo_rootx()
+            y = self.advanced_btn.winfo_rooty() + self.advanced_btn.winfo_height()
+            menu.tk_popup(x, y)
+        finally:
+            menu.grab_release()
+
+    def _on_mark_reported_now(self) -> None:
+        task = self._get_selected_task()
+        if not task:
+            return
+        try:
+            self.engine.mark_task_reported(task.id)
+            self.destroy()
+        except Exception as e:
+            messagebox.showerror("Error", str(e), parent=self)
+
+    def _on_mark_reported_custom(self) -> None:
+        task = self._get_selected_task()
+        if not task:
+            return
+        initial = task.last_reported_at or iso_now()
+        ts = ask_string(
+            "Reported Cutoff Timestamp",
+            "Enter ISO-8601 timestamp (e.g. 2026-10-01T09:00:00):",
+            initialvalue=initial,
+            parent=self,
+        )
+        if self.winfo_exists():
+            self.grab_set()
+        if ts is not None and ts.strip():
+            clean_ts = ts.strip()
+            try:
+                parse_iso(clean_ts)
+            except Exception:
+                messagebox.showerror(
+                    "Invalid Timestamp",
+                    f"'{clean_ts}' is not a valid ISO timestamp format.\nExample: 2026-10-01T09:00:00",
+                    parent=self,
+                )
+                return
+            try:
+                self.engine.mark_task_reported(task.id, reported_at=clean_ts)
+                self.destroy()
+            except Exception as e:
+                messagebox.showerror("Error", str(e), parent=self)
+
+    def _on_clear_reported_status(self) -> None:
+        task = self._get_selected_task()
+        if not task:
+            return
+        try:
+            self.engine.clear_task_reported(task.id)
+            self.destroy()
+        except Exception as e:
+            messagebox.showerror("Error", str(e), parent=self)
 
     def _update_day_choices(self) -> None:
         try:

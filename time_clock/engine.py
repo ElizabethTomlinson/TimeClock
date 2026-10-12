@@ -198,7 +198,7 @@ class TimeClockEngine:
             earned_at=earned_at,
             note=note,
         )
-        cutoff = reported_at or earned_at or iso_now()
+        cutoff = reported_at or iso_now()
         task = self.mark_task_reported(task_id=task_id, reported_at=cutoff)
         return task, earning_entry
 
