@@ -183,8 +183,9 @@ class AddEarningsDialog(tk.Toplevel):
         parent: Optional[tk.Widget],
         engine: TimeClockEngine,
         initial_task_id: Optional[str] = None,
+        mark_reported: bool = False,
         width: int = 440,
-        height: int = 360,
+        height: int = 390,
     ) -> None:
         master = parent.winfo_toplevel() if parent is not None else None
         super().__init__(master)
@@ -200,7 +201,7 @@ class AddEarningsDialog(tk.Toplevel):
 
         self.task_map: Dict[str, str] = {}  # display_str -> task_id
         self._updating_date_vars = False
-        self._build_ui(initial_task_id)
+        self._build_ui(initial_task_id, mark_reported=mark_reported)
         self._center_on_parent()
 
         self.protocol("WM_DELETE_WINDOW", self._on_cancel)
@@ -212,7 +213,7 @@ class AddEarningsDialog(tk.Toplevel):
         self.amount_entry.focus_set()
         self.wait_window(self)
 
-    def _build_ui(self, initial_task_id: Optional[str]) -> None:
+    def _build_ui(self, initial_task_id: Optional[str], mark_reported: bool = False) -> None:
         container = ttk.Frame(self, padding=16)
         container.pack(fill=tk.BOTH, expand=True)
 
@@ -252,6 +253,7 @@ class AddEarningsDialog(tk.Toplevel):
             state="readonly" if task_display_list else "disabled",
         )
         self.task_combo.pack(fill=tk.X, pady=(0, 12))
+        self.task_combo.bind("<<ComboboxSelected>>", self._on_task_changed)
 
         # Earnings Amount
         amount_lbl = ttk.Label(container, text="Earnings Amount ($):", anchor=tk.W)
@@ -323,7 +325,18 @@ class AddEarningsDialog(tk.Toplevel):
 
         self.note_var = tk.StringVar()
         self.note_entry = ttk.Entry(container, textvariable=self.note_var)
-        self.note_entry.pack(fill=tk.X, pady=(0, 16))
+        self.note_entry.pack(fill=tk.X, pady=(0, 12))
+
+        # Mark Task as Reported Checkbox
+        self.mark_reported_var = tk.BooleanVar(value=mark_reported)
+        self.mark_reported_check = ttk.Checkbutton(
+            container,
+            text="Mark task as reported",
+            variable=self.mark_reported_var,
+        )
+        self.mark_reported_check.pack(fill=tk.X, pady=(0, 16))
+
+        self._on_task_changed()
 
         # Action Buttons
         btn_box = ttk.Frame(container)
@@ -334,6 +347,18 @@ class AddEarningsDialog(tk.Toplevel):
 
         ok_btn = ttk.Button(btn_box, text="Save", width=10, command=self._on_ok)
         ok_btn.pack(side=tk.RIGHT)
+
+    def _on_task_changed(self, event: Optional[tk.Event] = None) -> None:
+        selected_display = self.task_var.get()
+        task_id = self.task_map.get(selected_display)
+        if not task_id:
+            return
+        task = self.engine.get_task(task_id)
+        if task and task.is_unpaid:
+            self.mark_reported_var.set(False)
+            self.mark_reported_check.configure(state=tk.DISABLED)
+        else:
+            self.mark_reported_check.configure(state=tk.NORMAL)
 
     def _update_day_choices(self) -> None:
         try:
@@ -465,12 +490,29 @@ class AddEarningsDialog(tk.Toplevel):
         note = self.note_var.get().strip()
 
         try:
-            entry = self.engine.add_earning(
-                task_id=task_id,
-                amount=amount,
-                earned_at=iso_date_str,
-                note=note,
-            )
+            if self.mark_reported_var.get():
+                task = self.engine.get_task(task_id)
+                if task and not task.is_unpaid:
+                    task, entry = self.engine.mark_task_reported_with_earning(
+                        task_id=task_id,
+                        amount=amount,
+                        earned_at=iso_date_str,
+                        note=note,
+                    )
+                else:
+                    entry = self.engine.add_earning(
+                        task_id=task_id,
+                        amount=amount,
+                        earned_at=iso_date_str,
+                        note=note,
+                    )
+            else:
+                entry = self.engine.add_earning(
+                    task_id=task_id,
+                    amount=amount,
+                    earned_at=iso_date_str,
+                    note=note,
+                )
             self._result = entry
             self.destroy()
         except Exception as e:

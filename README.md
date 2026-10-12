@@ -252,13 +252,14 @@ Time Clock includes a dedicated **Earnings View** and seamless earnings logging 
 
 ### Logging Earnings for Tasks
 You can record earnings directly for any task from either view:
-1. In the **Tasks** panel, select the task and click **Add Earnings...** (or choose **Advanced -> Add Earnings...**).
+1. In the **Tasks** panel, select the task and click **Add Earnings...** (or choose **Advanced -> Add Earnings...**, or choose **Mark Reported & Add Earnings...** from the reporting menu).
 2. In the modal dialog:
    - **Task**: Select the task from the dropdown (defaults to the currently selected task or automatically provides a default task if none exist yet).
    - **Earnings Amount**: Enter the monetary amount earned (e.g., `150.00`).
    - **Date Earned**: Select the year, month, and day using the date picker dropdowns or click **Pick Date...** to choose directly from an interactive calendar popup (defaults to today's date).
    - **Note**: Optionally add notes describing the milestone or payment.
-3. Click **Save**. The entry is recorded and period statistics recompute instantly.
+   - **Mark task as reported**: Check or uncheck this option to simultaneously update the task's reporting cutoff timestamp to the earned date (pre-checked when opened from the reporting menu; automatically disabled for unpaid tasks).
+3. Click **Save**. The entry is recorded, reporting cutoffs update, and period statistics recompute instantly.
 
 ### Setting Monthly Goals & 4-Week Month Option
 1. Switch to the **Earnings View** and click **Set Monthly Goal...**.
@@ -368,11 +369,15 @@ Click the **Report...** button in the Tasks panel (or **Mark Reported** in the C
    - Marks all sessions completed up to this point as reported.
    - Resets the task's **Unreported Time** counter to zero while keeping the **Total Time** intact.
 
-2. **Custom Timestamp...**:
+2. **Mark Reported & Add Earnings...**:
+   - Opens the **Add Earnings** dialog with the selected task and the reporting checkbox pre-selected.
+   - Allows recording the payment received while simultaneously advancing the task's reporting cutoff to the earned date.
+
+3. **Custom Timestamp...**:
    - Allows you to set a specific cutoff date and time in standard ISO format (`YYYY-MM-DDTHH:MM:SS`, e.g., `2026-10-01T17:00:00`).
    - Any sessions that ended at or before that timestamp will be marked as reported; sessions after that timestamp will remain unreported.
 
-3. **Clear Reported Status**:
+4. **Clear Reported Status**:
    - Clears the reporting cutoff for the task.
    - Returns all historical sessions to an unreported state, making your **Unreported Time** equal to your **Total Time**.
 

@@ -203,6 +203,55 @@ class TestTimeClockEngine(unittest.TestCase):
         with self.assertRaises(KeyError):
             self.engine.clear_task_reported("bad_id")
 
+    def test_mark_task_reported_with_earning(self):
+        task = self.engine.create_task("Combined Task")
+        reported_events = []
+        earning_events = []
+        self.bus.subscribe(EventType.TASK_REPORTED, lambda e: reported_events.append(e))
+        self.bus.subscribe(EventType.EARNING_ADDED, lambda e: earning_events.append(e))
+
+        # Successful combined reporting
+        updated_task, entry = self.engine.mark_task_reported_with_earning(
+            task_id=task.id,
+            amount=250.0,
+            earned_at="2026-10-10T14:00:00",
+            note="Milestone 1",
+            reported_at="2026-10-10T14:00:00",
+        )
+        self.assertEqual(entry.amount, 250.0)
+        self.assertEqual(entry.task_id, task.id)
+        self.assertEqual(entry.note, "Milestone 1")
+        self.assertEqual(updated_task.last_reported_at, "2026-10-10T14:00:00")
+        self.assertEqual(len(reported_events), 1)
+        self.assertEqual(len(earning_events), 1)
+
+        # Unpaid task rejection
+        unpaid = self.engine.create_task("Unpaid Internal", is_unpaid=True)
+        with self.assertRaises(ValueError):
+            self.engine.mark_task_reported_with_earning(
+                task_id=unpaid.id,
+                amount=100.0,
+            )
+
+        # Non-existent task rejection
+        with self.assertRaises(KeyError):
+            self.engine.mark_task_reported_with_earning(
+                task_id="bad_id",
+                amount=100.0,
+            )
+
+        # Non-positive amount rejection
+        with self.assertRaises(ValueError):
+            self.engine.mark_task_reported_with_earning(
+                task_id=task.id,
+                amount=-50.0,
+            )
+        with self.assertRaises(ValueError):
+            self.engine.mark_task_reported_with_earning(
+                task_id=task.id,
+                amount=0.0,
+            )
+
     def test_engine_unreported_duration_calculations(self):
         task = self.engine.create_task("Duration Calculation Task")
         self.engine.select_task(task.id)

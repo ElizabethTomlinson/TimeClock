@@ -152,6 +152,29 @@ class TestEngineEarningsCalculations(unittest.TestCase):
         with self.assertRaises(ValueError):
             self.engine.add_earning(self.task.id, -50.0)
 
+    def test_engine_mark_task_reported_with_earning(self) -> None:
+        reported_events = []
+        earning_events = []
+        self.event_bus.subscribe(EventType.TASK_REPORTED, lambda e: reported_events.append(e))
+        self.event_bus.subscribe(EventType.EARNING_ADDED, lambda e: earning_events.append(e))
+
+        task, earning = self.engine.mark_task_reported_with_earning(
+            task_id=self.task.id,
+            amount=450.0,
+            earned_at="2026-10-12T09:30:00",
+            note="Consulting Milestone",
+        )
+        self.assertEqual(earning.amount, 450.0)
+        self.assertEqual(earning.task_id, self.task.id)
+        self.assertEqual(task.last_reported_at, "2026-10-12T09:30:00")
+        self.assertEqual(len(reported_events), 1)
+        self.assertEqual(len(earning_events), 1)
+
+        # Unpaid task error
+        unpaid = self.engine.create_task("Unpaid Chore", is_unpaid=True)
+        with self.assertRaises(ValueError):
+            self.engine.mark_task_reported_with_earning(unpaid.id, 100.0)
+
     def test_engine_monthly_goal_setting_and_event(self) -> None:
         goal_events = []
         self.event_bus.subscribe(EventType.GOAL_UPDATED, lambda e: goal_events.append(e))
@@ -493,6 +516,70 @@ class TestAddEarningsDialogGUI(unittest.TestCase):
         self.assertEqual(len(earnings), 1)
         self.assertEqual(earnings[0].amount, 320.0)
         self.assertTrue(earnings[0].earned_at.startswith("2026-08-15"))
+
+    def test_add_earnings_dialog_mark_reported_integration(self) -> None:
+        from time_clock.gui.add_earnings_dialog import AddEarningsDialog
+
+        # 1. Open with mark_reported=True on a paid task
+        dialog = AddEarningsDialog(
+            parent=self.root,
+            engine=self.engine,
+            initial_task_id=self.task.id,
+            mark_reported=True,
+        )
+        self.assertTrue(dialog.mark_reported_var.get())
+        dialog.amount_var.set("500.00")
+        dialog.date_var.set("2026-10-12")
+        dialog._on_ok()
+
+        earnings = self.engine.get_earnings()
+        self.assertEqual(len(earnings), 1)
+        self.assertEqual(earnings[0].amount, 500.0)
+        task = self.engine.get_task(self.task.id)
+        self.assertIsNotNone(task.last_reported_at)
+        self.assertTrue(task.last_reported_at.startswith("2026-10-12"))
+
+    def test_add_earnings_dialog_unpaid_task_mark_reported_disabled(self) -> None:
+        from time_clock.gui.add_earnings_dialog import AddEarningsDialog
+
+        unpaid = self.engine.create_task("Unpaid Internal Task", is_unpaid=True)
+
+        # Open with mark_reported=True on an unpaid task
+        dialog = AddEarningsDialog(
+            parent=self.root,
+            engine=self.engine,
+            initial_task_id=unpaid.id,
+            mark_reported=True,
+        )
+        # Should be forced to False and disabled
+        self.assertFalse(dialog.mark_reported_var.get())
+        self.assertEqual(str(dialog.mark_reported_check.cget("state")), "disabled")
+
+        # Saving logs earning but leaves last_reported_at None
+        dialog.amount_var.set("200.00")
+        dialog._on_ok()
+
+        earnings = self.engine.get_earnings()
+        self.assertEqual(len(earnings), 1)
+        unpaid_task = self.engine.get_task(unpaid.id)
+        self.assertIsNone(unpaid_task.last_reported_at)
+
+        # Switching tasks in dialog toggles checkbutton state
+        dialog2 = AddEarningsDialog(
+            parent=self.root,
+            engine=self.engine,
+            initial_task_id=self.task.id,
+            mark_reported=True,
+        )
+        self.assertTrue(dialog2.mark_reported_var.get())
+        self.assertEqual(str(dialog2.mark_reported_check.cget("state")), "normal")
+
+        # Switch to unpaid task
+        unpaid_disp = [k for k, v in dialog2.task_map.items() if v == unpaid.id][0]
+        dialog2.task_var.set(unpaid_disp)
+        dialog2._on_task_changed()
+        self.assertFalse(dialog2.mark_reported_var.get())
+        self.assertEqual(str(dialog2.mark_reported_check.cget("state")), "disabled")
 
     def test_calendar_picker_dialog(self) -> None:
         from datetime import date

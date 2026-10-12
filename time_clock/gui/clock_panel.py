@@ -7,6 +7,7 @@ from typing import Optional
 
 from time_clock.engine import TimeClockEngine
 from time_clock.events import Event, EventType
+from time_clock.gui.add_earnings_dialog import AddEarningsDialog
 from time_clock.gui.prompt_dialog import ask_string
 from time_clock.models import Task, format_duration, iso_now, parse_iso
 
@@ -188,6 +189,7 @@ class ClockPanel(ttk.LabelFrame):
 
         menu = tk.Menu(self, tearoff=0)
         menu.add_command(label="Mark as Reported Now", command=self._mark_reported_now)
+        menu.add_command(label="Mark Reported & Add Earnings...", command=self._mark_reported_with_earnings)
         menu.add_command(label="Custom Timestamp...", command=self._mark_reported_custom)
         menu.add_command(label="Clear Reported Status", command=self._clear_reported_status)
 
@@ -205,6 +207,17 @@ class ClockPanel(ttk.LabelFrame):
                 self.engine.mark_task_reported(active_task.id)
             except Exception as e:
                 messagebox.showerror("Error", str(e), parent=self.winfo_toplevel())
+
+    def _mark_reported_with_earnings(self) -> None:
+        active_task = self.engine.get_active_task()
+        if not active_task or active_task.is_unpaid:
+            return
+        AddEarningsDialog(
+            parent=self.winfo_toplevel(),
+            engine=self.engine,
+            initial_task_id=active_task.id,
+            mark_reported=True,
+        )
 
     def _mark_reported_custom(self) -> None:
         active_task = self.engine.get_active_task()

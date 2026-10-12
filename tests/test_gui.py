@@ -1162,6 +1162,51 @@ class TestGUI(unittest.TestCase):
         self.assertIn("No Goal Set", panel.month_text_var.get())
         panel.destroy()
 
+    @patch("time_clock.gui.clock_panel.AddEarningsDialog")
+    def test_clock_panel_mark_reported_with_earnings(self, mock_dialog):
+        app = TimeClockApp(root=self.root, engine=self.engine)
+        task = self.engine.create_task("Report with Earn Task")
+        self.root.update_idletasks()
+
+        app.clock_panel._mark_reported_with_earnings()
+        mock_dialog.assert_called_once_with(
+            parent=self.root,
+            engine=self.engine,
+            initial_task_id=task.id,
+            mark_reported=True,
+        )
+
+        # Unpaid task guard
+        mock_dialog.reset_mock()
+        unpaid = self.engine.create_task("Unpaid Guard Task", is_unpaid=True)
+        self.engine.select_task(unpaid.id)
+        self.root.update_idletasks()
+
+        app.clock_panel._mark_reported_with_earnings()
+        mock_dialog.assert_not_called()
+
+    @patch("time_clock.gui.task_panel.AddEarningsDialog")
+    def test_task_panel_mark_reported_with_earnings(self, mock_dialog):
+        app = TimeClockApp(root=self.root, engine=self.engine)
+        task = self.engine.create_task("Task Panel Earn Task")
+        self.root.update_idletasks()
+
+        app.task_panel._mark_reported_with_earnings(task.id)
+        mock_dialog.assert_called_once_with(
+            parent=self.root,
+            engine=self.engine,
+            initial_task_id=task.id,
+            mark_reported=True,
+        )
+
+        # Unpaid task guard
+        mock_dialog.reset_mock()
+        unpaid = self.engine.create_task("Task Panel Unpaid", is_unpaid=True)
+        self.root.update_idletasks()
+
+        app.task_panel._mark_reported_with_earnings(unpaid.id)
+        mock_dialog.assert_not_called()
+
 
 if __name__ == "__main__":
     unittest.main()

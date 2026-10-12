@@ -276,6 +276,7 @@ class TaskPanel(ttk.LabelFrame):
 
         menu = tk.Menu(self, tearoff=0)
         menu.add_command(label="Mark as Reported Now", command=lambda: self._mark_reported_now(task_id))
+        menu.add_command(label="Mark Reported & Add Earnings...", command=lambda: self._mark_reported_with_earnings(task_id))
         menu.add_command(label="Custom Timestamp...", command=lambda: self._mark_reported_custom(task_id))
         menu.add_command(label="Clear Reported Status", command=lambda: self._clear_reported_status(task_id))
 
@@ -294,6 +295,17 @@ class TaskPanel(ttk.LabelFrame):
             self.engine.mark_task_reported(task_id)
         except Exception as e:
             messagebox.showerror("Error", str(e), parent=self.winfo_toplevel())
+
+    def _mark_reported_with_earnings(self, task_id: str) -> None:
+        task = self.engine.get_task(task_id)
+        if not task or task.is_unpaid:
+            return
+        AddEarningsDialog(
+            parent=self.winfo_toplevel(),
+            engine=self.engine,
+            initial_task_id=task_id,
+            mark_reported=True,
+        )
 
     def _mark_reported_custom(self, task_id: str) -> None:
         task = self.engine.get_task(task_id)

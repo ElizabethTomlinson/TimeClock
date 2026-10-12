@@ -5,7 +5,7 @@ import calendar
 import uuid
 from datetime import datetime, timedelta
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Union
+from typing import Any, Dict, List, Optional, Tuple, Union
 
 from time_clock.events import EventBus, EventType
 from time_clock.models import (
@@ -176,6 +176,31 @@ class TimeClockEngine:
         self._save_state()
         self.event_bus.emit(EventType.TASK_REPORTED, task)
         return task
+
+    def mark_task_reported_with_earning(
+        self,
+        task_id: str,
+        amount: float,
+        earned_at: Optional[str] = None,
+        note: str = "",
+        reported_at: Optional[str] = None,
+    ) -> Tuple[Task, EarningEntry]:
+        """Record earnings for a task and mark its logged time as reported."""
+        if task_id not in self.state.tasks:
+            raise KeyError(f"Task with id '{task_id}' not found.")
+        task = self.state.tasks[task_id]
+        if task.is_unpaid:
+            raise ValueError("Cannot mark unreported time for an unpaid task.")
+
+        earning_entry = self.add_earning(
+            task_id=task_id,
+            amount=amount,
+            earned_at=earned_at,
+            note=note,
+        )
+        cutoff = reported_at or earned_at or iso_now()
+        task = self.mark_task_reported(task_id=task_id, reported_at=cutoff)
+        return task, earning_entry
 
     def get_task_unreported_duration(self, task_id: str, include_running: bool = True) -> float:
         """Calculate total unreported duration in seconds for a task, optionally including active session."""
