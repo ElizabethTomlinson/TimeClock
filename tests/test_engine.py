@@ -707,6 +707,151 @@ class TestTimeClockEngine(unittest.TestCase):
         )
         self.assertEqual(period_durations["day"], 10800.0)  # 3600 + 7200
 
+    def test_consolidate_tasks_basic(self):
+        # Create 3 tasks with the exact same name
+        t1 = self.engine.create_task("Client Work")
+        t1.created_at = "2026-10-01T08:00:00"
+        t1.entries.append(
+            TimeEntry(id="e1", start_time="2026-10-01T09:00:00", end_time="2026-10-01T10:00:00", duration_seconds=3600.0)
+        )
+
+        t2 = self.engine.create_task("Client Work")
+        t2.created_at = "2026-10-02T08:00:00"
+        t2.entries.append(
+            TimeEntry(id="e2", start_time="2026-10-02T09:00:00", end_time="2026-10-02T09:30:00", duration_seconds=1800.0)
+        )
+
+        t3 = self.engine.create_task("Client Work")
+        t3.created_at = "2026-10-03T08:00:00"
+        t3.entries.append(
+            TimeEntry(id="e3", start_time="2026-10-03T09:00:00", end_time="2026-10-03T11:00:00", duration_seconds=7200.0)
+        )
+        self.engine._save_state()
+
+        self.engine.add_earning(t1.id, 100.0, "2026-10-01", "Initial deposit")
+        self.engine.add_earning(t2.id, 200.0, "2026-10-02", "Milestone 1")
+        self.engine.add_earning(t3.id, 300.0, "2026-10-03", "Milestone 2")
+
+        events_emitted = []
+        self.bus.subscribe(EventType.TASKS_CONSOLIDATED, lambda e: events_emitted.append(e))
+
+        summary = self.engine.consolidate_tasks_by_name()
+        self.assertEqual(summary["groups_consolidated"], 1)
+        self.assertEqual(summary["tasks_merged"], 3)
+        self.assertEqual(summary["tasks_removed"], 2)
+        self.assertEqual(len(events_emitted), 1)
+
+        # Verify only 1 task remains
+        self.assertEqual(len(self.engine.state.tasks), 1)
+        consolidated = self.engine.get_task(t1.id)
+        self.assertIsNotNone(consolidated)
+        self.assertEqual(consolidated.name, "Client Work")
+        self.assertEqual(consolidated.created_at, "2026-10-01T08:00:00")
+        self.assertEqual(len(consolidated.entries), 3)
+        self.assertEqual([e.id for e in consolidated.entries], ["e1", "e2", "e3"])
+        self.assertEqual(consolidated.total_duration_seconds, 12600.0)
+
+        # Verify earnings reassignment
+        earnings = self.storage.get_earnings(task_id=t1.id)
+        self.assertEqual(len(earnings), 3)
+        self.assertEqual(sum(e.amount for e in earnings), 600.0)
+
+        # Verify persistence across engine reload
+        new_engine = TimeClockEngine(storage=self.storage, event_bus=EventBus())
+        self.assertEqual(len(new_engine.state.tasks), 1)
+        reloaded = new_engine.get_task(t1.id)
+        self.assertEqual(len(reloaded.entries), 3)
+        self.assertEqual(reloaded.total_duration_seconds, 12600.0)
+
+    def test_consolidate_tasks_with_active_running_session(self):
+        t1 = self.engine.create_task("Design Project")
+        t1.created_at = "2026-10-01T08:00:00"
+        t2 = self.engine.create_task("Design Project")
+        t2.created_at = "2026-10-02T08:00:00"
+        self.engine._save_state()
+
+        # Select t2 and start timer
+        self.engine.select_task(t2.id)
+        self.engine.clock_in()
+        self.assertTrue(self.engine.state.is_running)
+        self.assertEqual(self.engine.state.active_task_id, t2.id)
+
+        summary = self.engine.consolidate_tasks_by_name()
+        self.assertEqual(summary["groups_consolidated"], 1)
+        self.assertEqual(summary["tasks_merged"], 2)
+        self.assertEqual(summary["tasks_removed"], 1)
+
+        # Running status and timer should be preserved on primary task
+        self.assertTrue(self.engine.state.is_running)
+        self.assertEqual(self.engine.state.active_task_id, t1.id)
+
+        # Clock out and verify entry added to t1
+        self.engine.clock_out()
+        self.assertFalse(self.engine.state.is_running)
+        self.assertEqual(len(t1.entries), 1)
+
+    def test_consolidate_tasks_metadata_resolution(self):
+        # Group 1: 1 paid, 1 unpaid -> consolidated paid
+        t1 = self.engine.create_task("Dev Task", is_unpaid=True)
+        t1.created_at = "2026-10-02T08:00:00"
+        t1.last_reported_at = "2026-10-02T12:00:00"
+        t2 = self.engine.create_task("Dev Task", is_unpaid=False)
+        t2.created_at = "2026-10-01T08:00:00"
+        t2.last_reported_at = "2026-10-04T12:00:00"
+
+        # Group 2: all unpaid -> consolidated unpaid
+        u1 = self.engine.create_task("Admin", is_unpaid=True)
+        u1.created_at = "2026-10-01T08:00:00"
+        u2 = self.engine.create_task("Admin", is_unpaid=True)
+        u2.created_at = "2026-10-03T08:00:00"
+
+        # Group 3: 1 active, 1 archived -> consolidated active
+        a1 = self.engine.create_task("Maintenance")
+        a1.created_at = "2026-10-01T08:00:00"
+        a2 = self.engine.create_task("Maintenance")
+        a2.created_at = "2026-10-05T08:00:00"
+        self.engine.archive_task(a2.id)
+
+        # Group 4: all archived -> consolidated archived
+        r1 = self.engine.create_task("Old Project")
+        r1.created_at = "2026-10-01T08:00:00"
+        r2 = self.engine.create_task("Old Project")
+        r2.created_at = "2026-10-06T08:00:00"
+        self.engine.archive_task(r1.id)
+        self.engine.archive_task(r2.id)
+
+        self.engine._save_state()
+
+        summary = self.engine.consolidate_tasks_by_name()
+        self.assertEqual(summary["groups_consolidated"], 4)
+        self.assertEqual(summary["tasks_merged"], 8)
+        self.assertEqual(summary["tasks_removed"], 4)
+
+        dev_task = self.engine.get_task(t2.id)
+        self.assertFalse(dev_task.is_unpaid)
+        self.assertEqual(dev_task.last_reported_at, "2026-10-04T12:00:00")
+        self.assertEqual(dev_task.created_at, "2026-10-01T08:00:00")
+
+        admin_task = self.engine.get_task(u1.id)
+        self.assertTrue(admin_task.is_unpaid)
+
+        maint_task = self.engine.get_task(a1.id)
+        self.assertFalse(maint_task.is_archived)
+
+        old_task = self.engine.get_task(r1.id)
+        self.assertTrue(old_task.is_archived)
+
+    def test_consolidate_tasks_no_duplicates(self):
+        self.engine.create_task("Task Alpha")
+        self.engine.create_task("Task Beta")
+        self.engine.create_task("Task Gamma")
+
+        summary = self.engine.consolidate_tasks_by_name()
+        self.assertEqual(summary["groups_consolidated"], 0)
+        self.assertEqual(summary["tasks_merged"], 0)
+        self.assertEqual(summary["tasks_removed"], 0)
+        self.assertEqual(len(self.engine.state.tasks), 3)
+
 
 if __name__ == "__main__":
     unittest.main()

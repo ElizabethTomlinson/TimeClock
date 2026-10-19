@@ -137,6 +137,10 @@ class TimeClockApp:
             command=self._delete_task,
             underline=0,
         )
+        advanced_menu.add_command(
+            label="Consolidate Tasks with the Same Name",
+            command=self._consolidate_tasks,
+        )
 
         advanced_menu.add_command(
             label="Historical Time Stats...",
@@ -178,6 +182,36 @@ class TimeClockApp:
         """Prompt user to delete the currently selected task."""
         if hasattr(self, "task_panel") and self.task_panel:
             self.task_panel._on_delete_task()
+
+    def _consolidate_tasks(self) -> None:
+        """Prompt confirmation and consolidate duplicate tasks sharing the exact same name."""
+        confirm = messagebox.askyesno(
+            "Consolidate Tasks",
+            "Are you sure you want to consolidate all tasks sharing the exact same name?\n\n"
+            "This will merge all recorded sessions, time entries, and earnings into a single primary task.",
+            parent=self.root,
+        )
+        if not confirm:
+            return
+
+        summary = self.engine.consolidate_tasks_by_name()
+        if summary.get("groups_consolidated", 0) == 0:
+            messagebox.showinfo(
+                "Consolidate Tasks",
+                "No duplicate tasks found. All task names are unique.",
+                parent=self.root,
+            )
+        else:
+            groups = summary["groups_consolidated"]
+            merged = summary["tasks_merged"]
+            removed = summary["tasks_removed"]
+            messagebox.showinfo(
+                "Consolidate Tasks",
+                f"Consolidation complete!\n\n"
+                f"Merged {merged} tasks across {groups} duplicate {'group' if groups == 1 else 'groups'} "
+                f"({removed} duplicate {'task' if removed == 1 else 'tasks'} removed).",
+                parent=self.root,
+            )
 
     def _export_as_csv(self) -> None:
         """Prompt user for file location and export full tracking data as CSV."""

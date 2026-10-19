@@ -1239,6 +1239,37 @@ class TestGUI(unittest.TestCase):
         mock_dialog.assert_not_called()
         mock_info.assert_called_once()
 
+    @patch("time_clock.gui.app.messagebox.showinfo")
+    @patch("time_clock.gui.app.messagebox.askyesno")
+    def test_advanced_menu_consolidate_tasks_command(self, mock_askyesno, mock_showinfo):
+        app = TimeClockApp(root=self.root, engine=self.engine)
+        t1 = self.engine.create_task("Duplicate Work")
+        t1.created_at = "2026-10-01T08:00:00"
+        t2 = self.engine.create_task("Duplicate Work")
+        t2.created_at = "2026-10-02T08:00:00"
+        self.root.update_idletasks()
+
+        # 1. Test confirmation = False (cancel)
+        mock_askyesno.return_value = False
+        app._consolidate_tasks()
+        mock_showinfo.assert_not_called()
+        self.assertEqual(len(self.engine.state.tasks), 2)
+
+        # 2. Test confirmation = True (proceed)
+        mock_askyesno.return_value = True
+        app._consolidate_tasks()
+        self.root.update_idletasks()
+        mock_showinfo.assert_called_once()
+        self.assertIn("Merged 2 tasks across 1 duplicate group", mock_showinfo.call_args[0][1])
+        self.assertEqual(len(self.engine.state.tasks), 1)
+        self.assertEqual(len(app.task_panel.tree.get_children()), 1)
+
+        # 3. Test when no duplicates remain
+        mock_showinfo.reset_mock()
+        app._consolidate_tasks()
+        mock_showinfo.assert_called_once()
+        self.assertIn("No duplicate tasks found", mock_showinfo.call_args[0][1])
+
 
 if __name__ == "__main__":
     unittest.main()

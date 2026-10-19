@@ -161,6 +161,7 @@ class ClockPanel(ttk.LabelFrame):
         self.engine.event_bus.subscribe(EventType.TASK_UPDATED, self._on_task_renamed_event)
         self.engine.event_bus.subscribe(EventType.TASK_REPORTED, self._on_task_reported_event)
         self.engine.event_bus.subscribe(EventType.ENTRY_UPDATED, self._on_entry_updated_event)
+        self.engine.event_bus.subscribe(EventType.TASKS_CONSOLIDATED, self._on_tasks_consolidated_event)
         self.engine.event_bus.subscribe(EventType.TICK, self._on_tick_event)
         self.engine.event_bus.subscribe(EventType.STATE_LOADED, self._on_state_loaded_event)
 
@@ -252,6 +253,9 @@ class ClockPanel(ttk.LabelFrame):
         self.month_time_var.set(f"Month: {format_duration(periods['month'])}")
 
     def _on_task_created_event(self, event: Event) -> None:
+        self.refresh_display()
+
+    def _on_tasks_consolidated_event(self, event: Event) -> None:
         self.refresh_display()
 
     def _on_task_archived_event(self, event: Event) -> None:

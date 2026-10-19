@@ -6,7 +6,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from time_clock.models import AppState, Task, TimeEntry
+from time_clock.models import AppState, EarningEntry, Task, TimeEntry
 from time_clock.storage import SQLiteStorage
 
 
@@ -462,6 +462,32 @@ class TestSQLiteStorage(unittest.TestCase):
         self.assertEqual(reloaded.tasks["t1"].entries[1].id, "e2")
         self.assertEqual(reloaded.tasks["t1"].entries[1].duration_seconds, 3600.0)
         self.assertEqual(reloaded.tasks["t1"].total_duration_seconds, 9000.0)
+
+    def test_reassign_task_data_integrity(self):
+        t1 = Task(id="t1", name="Target Task", created_at="2026-10-01T08:00:00")
+        t2 = Task(id="t2", name="Old Task 1", created_at="2026-10-02T08:00:00")
+        t3 = Task(id="t3", name="Old Task 2", created_at="2026-10-03T08:00:00")
+
+        state = AppState(tasks={"t1": t1, "t2": t2, "t3": t3}, active_task_id="t1")
+        self.storage.save(state)
+
+        # Add entries and earnings
+        self.storage.add_earning(EarningEntry(id="earn1", task_id="t1", amount=50.0, earned_at="2026-10-01"))
+        self.storage.add_earning(EarningEntry(id="earn2", task_id="t2", amount=150.0, earned_at="2026-10-02"))
+        self.storage.add_earning(EarningEntry(id="earn3", task_id="t3", amount=250.0, earned_at="2026-10-03"))
+
+        # Reassign data
+        self.storage.reassign_task_data(["t2", "t3"], "t1")
+
+        # Now remove t2 and t3 from state and save
+        new_state = AppState(tasks={"t1": t1}, active_task_id="t1")
+        self.storage.save(new_state)
+
+        # Verify earnings were preserved under t1
+        t1_earnings = self.storage.get_earnings(task_id="t1")
+        self.assertEqual(len(t1_earnings), 3)
+        self.assertEqual({e.id for e in t1_earnings}, {"earn1", "earn2", "earn3"})
+        self.assertEqual(sum(e.amount for e in t1_earnings), 450.0)
 
 
 if __name__ == "__main__":

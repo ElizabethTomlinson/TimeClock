@@ -39,6 +39,10 @@ class Storage(abc.ABC):
         """Delete an earning entry by ID."""
         pass
 
+    def reassign_task_data(self, old_task_ids: List[str], new_task_id: str) -> None:
+        """Reassign all earnings and time entries from old_task_ids to new_task_id."""
+        pass
+
     def get_monthly_goal(self, month_key: str) -> MonthlyGoal:
         """Retrieve monthly goal configuration for given month (YYYY-MM)."""
         return MonthlyGoal(month_key=month_key)
@@ -369,6 +373,21 @@ class SQLiteStorage(Storage):
         """Delete an earning entry by ID."""
         with self._connection() as conn:
             conn.execute("DELETE FROM earnings WHERE id = ?;", (earning_id,))
+
+    def reassign_task_data(self, old_task_ids: List[str], new_task_id: str) -> None:
+        """Reassign all earnings and time entries from old_task_ids to new_task_id."""
+        if not old_task_ids:
+            return
+        placeholders = ",".join("?" * len(old_task_ids))
+        with self._connection() as conn:
+            conn.execute(
+                f"UPDATE earnings SET task_id = ? WHERE task_id IN ({placeholders});",
+                [new_task_id, *old_task_ids],
+            )
+            conn.execute(
+                f"UPDATE time_entries SET task_id = ? WHERE task_id IN ({placeholders});",
+                [new_task_id, *old_task_ids],
+            )
 
     def get_monthly_goal(self, month_key: str) -> MonthlyGoal:
         """Retrieve monthly goal for specified month (YYYY-MM)."""

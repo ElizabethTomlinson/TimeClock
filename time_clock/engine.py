@@ -700,3 +700,76 @@ class TimeClockEngine:
             export_to_json(self.state, file_path, task_id=task_id)
         else:
             raise ValueError(f"Unsupported export format: '{format}'. Expected 'csv' or 'json'.")
+
+    def consolidate_tasks_by_name(self) -> Dict[str, int]:
+        """
+        Consolidate all tasks sharing the same name into a single task.
+
+        Returns:
+            dict: {"groups_consolidated": int, "tasks_merged": int, "tasks_removed": int}
+        """
+        groups: Dict[str, List[Task]] = {}
+        for task in self.state.tasks.values():
+            key = task.name.strip()
+            groups.setdefault(key, []).append(task)
+
+        duplicate_groups = [g for g in groups.values() if len(g) > 1]
+        if not duplicate_groups:
+            return {"groups_consolidated": 0, "tasks_merged": 0, "tasks_removed": 0}
+
+        groups_consolidated = 0
+        tasks_merged = 0
+        tasks_removed = 0
+
+        for group in duplicate_groups:
+            # Sort by created_at (earliest first), using id as tie-breaker
+            sorted_group = sorted(group, key=lambda t: (t.created_at or "", t.id))
+            primary_task = sorted_group[0]
+            secondary_tasks = sorted_group[1:]
+            old_task_ids = [t.id for t in secondary_tasks]
+
+            # 1. Merge time entries and sort chronologically by start_time
+            all_entries: List[TimeEntry] = []
+            for t in group:
+                all_entries.extend(t.entries)
+            all_entries.sort(key=lambda e: e.start_time or "")
+            primary_task.entries = all_entries
+
+            # 2. Consolidate metadata
+            created_timestamps = [t.created_at for t in group if t.created_at]
+            if created_timestamps:
+                primary_task.created_at = min(created_timestamps)
+
+            reported_timestamps = [t.last_reported_at for t in group if t.last_reported_at]
+            primary_task.last_reported_at = max(reported_timestamps) if reported_timestamps else None
+
+            # Unpaid only if all duplicates are unpaid
+            primary_task.is_unpaid = all(t.is_unpaid for t in group)
+
+            # Archived only if all duplicates are archived
+            primary_task.is_archived = all(t.is_archived for t in group)
+
+            # 3. Reassign storage data (earnings and time entries)
+            self.storage.reassign_task_data(old_task_ids, primary_task.id)
+
+            # 4. If active_task_id was one of the secondary tasks, point to primary_task
+            if self.state.active_task_id in old_task_ids:
+                self.state.active_task_id = primary_task.id
+
+            # 5. Remove secondary tasks from state
+            for t in secondary_tasks:
+                if t.id in self.state.tasks:
+                    del self.state.tasks[t.id]
+
+            groups_consolidated += 1
+            tasks_merged += len(group)
+            tasks_removed += len(secondary_tasks)
+
+        self._save_state()
+        summary = {
+            "groups_consolidated": groups_consolidated,
+            "tasks_merged": tasks_merged,
+            "tasks_removed": tasks_removed,
+        }
+        self.event_bus.emit(EventType.TASKS_CONSOLIDATED, summary)
+        return summary

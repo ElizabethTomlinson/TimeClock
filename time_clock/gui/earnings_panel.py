@@ -268,6 +268,7 @@ class EarningsPanel(ttk.Frame):
         self.engine.event_bus.subscribe(EventType.TASK_DELETED, self._on_event_refresh)
         self.engine.event_bus.subscribe(EventType.TASK_RENAMED, self._on_event_refresh)
         self.engine.event_bus.subscribe(EventType.TASK_UPDATED, self._on_event_refresh)
+        self.engine.event_bus.subscribe(EventType.TASKS_CONSOLIDATED, self._on_event_refresh)
         self.engine.event_bus.subscribe(EventType.STATE_LOADED, self._on_event_refresh)
 
     def _on_event_refresh(self, event: Event) -> None:

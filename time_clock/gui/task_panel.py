@@ -124,6 +124,7 @@ class TaskPanel(ttk.LabelFrame):
         self.engine.event_bus.subscribe(EventType.TASK_REPORTED, self._on_task_reported_event)
         self.engine.event_bus.subscribe(EventType.EARNING_ADDED, self._on_earning_event)
         self.engine.event_bus.subscribe(EventType.EARNING_DELETED, self._on_earning_event)
+        self.engine.event_bus.subscribe(EventType.TASKS_CONSOLIDATED, self._on_tasks_consolidated_event)
         self.engine.event_bus.subscribe(EventType.CLOCK_IN, self._on_clock_in_event)
         self.engine.event_bus.subscribe(EventType.CLOCK_OUT, self._on_clock_out_event)
         self.engine.event_bus.subscribe(EventType.ENTRY_UPDATED, self._on_entry_updated_event)
@@ -361,6 +362,9 @@ class TaskPanel(ttk.LabelFrame):
                 self._update_summary()
 
     def _on_task_created_event(self, event: Event) -> None:
+        self.refresh_task_list()
+
+    def _on_tasks_consolidated_event(self, event: Event) -> None:
         self.refresh_task_list()
 
     def _on_task_archived_event(self, event: Event) -> None:

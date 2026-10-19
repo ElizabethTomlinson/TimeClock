@@ -129,7 +129,7 @@ The Time Clock window is organized into intuitive, switchable views accessible v
 - **Top Header Bar**: Switch instantly between the **Time Clock View** and the dedicated **Earnings View**.
 - **File Menu (Top Bar)**: Access global data export (CSV/JSON) and application exit.
 - **View Menu (Top Bar)**: Switch between Time Clock and Earnings & Goals views.
-- **Advanced Menu (Top Bar)**: Log task earnings (**Add Earnings...**), open the unified task editing dialog (**Edit Task...**), permanently delete a selected task (**Delete Task...**), or inspect historical period metrics using a calendar dialog (**Historical Time Stats...**).
+- **Advanced Menu (Top Bar)**: Log task earnings (**Add Earnings...**), open the unified task editing dialog (**Edit Task...**), permanently delete a selected task (**Delete Task...**), combine duplicate tasks (**Consolidate Tasks with the Same Name**), or inspect historical period metrics using a calendar dialog (**Historical Time Stats...**).
 - **Tasks Panel (Left Side)**: Manage your list of projects or tasks, view the `💰` paid status column, record earnings, and configure options.
 - **Clock Tracker (Top Right)**: Control your live timer and see current session progress.
 - **Session History (Bottom Right)**: Review logged work sessions for the selected task.
@@ -208,6 +208,18 @@ Archiving allows you to keep your active task list organized and focused without
 2. In the top application menu bar, click **Advanced** and select **Delete Task...**.
 3. A confirmation dialog will ask if you are sure you want to delete the task and all of its recorded sessions.
 4. Confirm to permanently remove the task.
+
+### Consolidating Tasks with the Same Name
+If you have created multiple tasks sharing the exact same name (for example, across different sprints or project phases) and want to combine them into a single unified task:
+1. In the top application menu bar, click **Advanced** and select **Consolidate Tasks with the Same Name**.
+2. A confirmation prompt will appear asking to confirm merging all tasks with duplicate names.
+3. Upon confirmation, Time Clock merges all duplicate tasks:
+   - **Chronological Session History**: All historical work sessions and time entries are merged into the earliest created task and sorted chronologically.
+   - **Cumulative Duration & Reporting**: Total time is recomputed seamlessly across all merged sessions. The latest reporting cutoff timestamp is preserved.
+   - **Earnings Records**: All logged earnings entries associated with any duplicate are safely reassigned to the consolidated task.
+   - **Billable & Archive Status**: The consolidated task remains billable/paid if any duplicate was paid, and active if any duplicate was active.
+   - **Running Timer Preservation**: If you are currently clocked into one of the duplicate tasks, your running session continues uninterrupted on the consolidated task.
+4. A summary notification displays the number of consolidated task groups and merged tasks. If no duplicate names exist, Time Clock notifies you that all task names are already unique.
 
 ---
 
