@@ -3,10 +3,13 @@ from __future__ import annotations
 
 import tkinter as tk
 from tkinter import messagebox, ttk
-from typing import Optional
+from typing import Any, Optional
+
+import customtkinter as ctk
 
 from time_clock.engine import TimeClockEngine
 from time_clock.events import Event, EventType
+from time_clock.gui import theme
 from time_clock.gui.add_earnings_dialog import AddEarningsDialog
 from time_clock.gui.edit_session_dialog import EditClockInOutDialog
 from time_clock.gui.prompt_dialog import ask_string
@@ -22,11 +25,17 @@ COL_HEADINGS = {
 }
 
 
-class TaskPanel(ttk.LabelFrame):
-    """Panel for creating, listing, selecting, and managing tasks."""
+class TaskPanel(ctk.CTkFrame):
+    """Modernized card panel for creating, listing, selecting, and managing tasks."""
 
     def __init__(self, parent: tk.Widget, engine: TimeClockEngine) -> None:
-        super().__init__(parent, text="Tasks", padding=10)
+        super().__init__(
+            parent,
+            corner_radius=theme.RADIUS_CARD,
+            fg_color=theme.BG_CARD,
+            border_width=1,
+            border_color=theme.BORDER_CARD,
+        )
         self.engine = engine
         self._updating_selection = False
         self._sort_column: Optional[str] = None
@@ -36,30 +45,69 @@ class TaskPanel(ttk.LabelFrame):
         self._register_events()
         self.refresh_task_list()
 
-    def _build_ui(self) -> None:
-        # Task Creation Section
-        add_frame = ttk.Frame(self)
-        add_frame.pack(fill=tk.X, pady=(0, 10))
+    def configure(self, require_redraw: bool = False, **kwargs: Any) -> Any:
+        if "text" in kwargs:
+            text_val = kwargs.pop("text")
+            if hasattr(self, "_header_title_lbl") and self._header_title_lbl:
+                self._header_title_lbl.configure(text=text_val)
+        if kwargs:
+            return super().configure(require_redraw=require_redraw, **kwargs)
+        return None
 
-        self.add_btn = ttk.Button(
-            add_frame,
-            text="New Task...",
-            command=self._on_add_task,
+    config = configure
+
+    def cget(self, attribute_name: str) -> Any:
+        if attribute_name == "text":
+            if hasattr(self, "_header_title_lbl") and self._header_title_lbl:
+                return self._header_title_lbl.cget("text")
+        return super().cget(attribute_name)
+
+    def __getitem__(self, key: str) -> Any:
+        return self.cget(key)
+
+    def _build_ui(self) -> None:
+        # Header / Toolbar Section
+        header_frame = ctk.CTkFrame(self, fg_color="transparent")
+        header_frame.pack(fill=tk.X, padx=12, pady=(12, 8))
+
+        self._header_title_lbl = ctk.CTkLabel(
+            header_frame,
+            text="Tasks",
+            font=theme.get_font(14, weight="bold"),
+            text_color=theme.TEXT_PRIMARY,
+            anchor="w",
         )
-        self.add_btn.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=(0, 6))
+        self._header_title_lbl.pack(side=tk.LEFT)
+
+        self.add_btn = ctk.CTkButton(
+            header_frame,
+            text="+ New Task...",
+            command=self._on_add_task,
+            corner_radius=theme.RADIUS_BUTTON,
+            fg_color=theme.PRIMARY,
+            hover_color=theme.PRIMARY_HOVER,
+            font=theme.get_font(12, weight="bold"),
+            height=28,
+        )
+        self.add_btn.pack(side=tk.RIGHT, padx=(8, 0))
 
         self.show_archived_var = tk.BooleanVar(value=False)
-        self.show_archived_cb = ttk.Checkbutton(
-            add_frame,
+        self.show_archived_cb = ctk.CTkCheckBox(
+            header_frame,
             text="Show Archived",
             variable=self.show_archived_var,
             command=self.refresh_task_list,
+            font=theme.get_font(11),
+            corner_radius=theme.RADIUS_INPUT,
+            height=20,
+            checkbox_width=18,
+            checkbox_height=18,
         )
         self.show_archived_cb.pack(side=tk.RIGHT)
 
         # Task List / Treeview Section
-        list_frame = ttk.Frame(self)
-        list_frame.pack(fill=tk.BOTH, expand=True)
+        list_frame = ctk.CTkFrame(self, fg_color="transparent")
+        list_frame.pack(fill=tk.BOTH, expand=True, padx=12, pady=(0, 6))
 
         columns = ("paid", "name", "total_time", "unreported_time")
         self.tree = ttk.Treeview(
@@ -67,7 +115,7 @@ class TaskPanel(ttk.LabelFrame):
             columns=columns,
             show="headings",
             selectmode="browse",
-            height=8
+            height=8,
         )
         for col, text in COL_HEADINGS.items():
             self.tree.heading(col, text=text, command=lambda c=col: self._on_header_click(c))
@@ -76,10 +124,7 @@ class TaskPanel(ttk.LabelFrame):
         self.tree.column("total_time", width=80, anchor=tk.E)
         self.tree.column("unreported_time", width=90, anchor=tk.E)
 
-        self.tree.tag_configure("has_unreported", foreground="#005fb8")
-        self.tree.tag_configure("all_reported", foreground="#333333")
-        self.tree.tag_configure("unpaid", foreground="#a65100")
-        self.tree.tag_configure("archived", foreground="#888888")
+        self.apply_tree_tags()
 
         scrollbar = ttk.Scrollbar(list_frame, orient=tk.VERTICAL, command=self.tree.yview)
         self.tree.configure(yscrollcommand=scrollbar.set)
@@ -90,35 +135,86 @@ class TaskPanel(ttk.LabelFrame):
         self.tree.bind("<<TreeviewSelect>>", self._on_tree_select)
 
         # Summary Section
-        summary_frame = ttk.Frame(self)
-        summary_frame.pack(fill=tk.X, pady=(6, 0))
+        summary_frame = ctk.CTkFrame(self, fg_color="transparent")
+        summary_frame.pack(fill=tk.X, padx=12, pady=(0, 6))
 
         self.summary_var = tk.StringVar(value="Unreported: 0 projects (00:00:00)")
-        self.summary_lbl = ttk.Label(
+        self.summary_lbl = ctk.CTkLabel(
             summary_frame,
             textvariable=self.summary_var,
-            font=("Helvetica", 9, "italic"),
-            anchor=tk.W,
+            font=theme.get_font(10),
+            text_color=theme.TEXT_MUTED,
+            anchor="w",
         )
         self.summary_lbl.pack(side=tk.LEFT, fill=tk.X, expand=True)
 
-        # Management Buttons Section
-        btn_frame = ttk.Frame(self)
-        btn_frame.pack(fill=tk.X, pady=(10, 0))
+        # Management Action Buttons Section
+        btn_frame = ctk.CTkFrame(self, fg_color="transparent")
+        btn_frame.pack(fill=tk.X, padx=12, pady=(0, 12))
 
-        rename_btn = ttk.Button(btn_frame, text="Rename", command=self._on_rename_task)
-        rename_btn.pack(side=tk.LEFT, padx=(0, 4), expand=True, fill=tk.X)
+        self.rename_btn = ctk.CTkButton(
+            btn_frame,
+            text="Rename",
+            command=self._on_rename_task,
+            corner_radius=theme.RADIUS_BUTTON,
+            fg_color=theme.BG_SECONDARY_BTN,
+            hover_color=theme.BG_SECONDARY_BTN_HOVER,
+            text_color=theme.TEXT_PRIMARY,
+            font=theme.get_font(11),
+            height=28,
+        )
+        self.rename_btn.pack(side=tk.LEFT, padx=(0, 4), expand=True, fill=tk.X)
 
-        options_btn = ttk.Button(btn_frame, text="Options...", command=self._on_edit_options)
-        options_btn.pack(side=tk.LEFT, padx=(0, 4), expand=True, fill=tk.X)
+        self.options_btn = ctk.CTkButton(
+            btn_frame,
+            text="Options...",
+            command=self._on_edit_options,
+            corner_radius=theme.RADIUS_BUTTON,
+            fg_color=theme.BG_SECONDARY_BTN,
+            hover_color=theme.BG_SECONDARY_BTN_HOVER,
+            text_color=theme.TEXT_PRIMARY,
+            font=theme.get_font(11),
+            height=28,
+        )
+        self.options_btn.pack(side=tk.LEFT, padx=(0, 4), expand=True, fill=tk.X)
 
-        earnings_btn = ttk.Button(btn_frame, text="Add Earnings...", command=self._on_add_earnings)
-        earnings_btn.pack(side=tk.LEFT, padx=(0, 4), expand=True, fill=tk.X)
+        self.earnings_btn = ctk.CTkButton(
+            btn_frame,
+            text="Add Earnings...",
+            command=self._on_add_earnings,
+            corner_radius=theme.RADIUS_BUTTON,
+            fg_color=theme.BG_SECONDARY_BTN,
+            hover_color=theme.BG_SECONDARY_BTN_HOVER,
+            text_color=theme.TEXT_PRIMARY,
+            font=theme.get_font(11),
+            height=28,
+        )
+        self.earnings_btn.pack(side=tk.LEFT, padx=(0, 4), expand=True, fill=tk.X)
 
-        self.report_btn = ttk.Button(btn_frame, text="Report...", command=self._on_report_clicked)
+        self.report_btn = ctk.CTkButton(
+            btn_frame,
+            text="Report...",
+            command=self._on_report_clicked,
+            corner_radius=theme.RADIUS_BUTTON,
+            fg_color=theme.BG_SECONDARY_BTN,
+            hover_color=theme.BG_SECONDARY_BTN_HOVER,
+            text_color=theme.TEXT_PRIMARY,
+            font=theme.get_font(11),
+            height=28,
+        )
         self.report_btn.pack(side=tk.LEFT, padx=(0, 4), expand=True, fill=tk.X)
 
-        self.archive_btn = ttk.Button(btn_frame, text="Archive", command=self._on_archive_toggle_clicked)
+        self.archive_btn = ctk.CTkButton(
+            btn_frame,
+            text="Archive",
+            command=self._on_archive_toggle_clicked,
+            corner_radius=theme.RADIUS_BUTTON,
+            fg_color=theme.BG_SECONDARY_BTN,
+            hover_color=theme.BG_SECONDARY_BTN_HOVER,
+            text_color=theme.TEXT_PRIMARY,
+            font=theme.get_font(11),
+            height=28,
+        )
         self.archive_btn.pack(side=tk.LEFT, expand=True, fill=tk.X)
 
     def _register_events(self) -> None:
@@ -370,6 +466,13 @@ class TaskPanel(ttk.LabelFrame):
             reverse = self._sort_direction == "primary"
             return sorted(tasks, key=lambda t: not t.is_unpaid, reverse=reverse)
         return tasks
+
+    def apply_tree_tags(self) -> None:
+        """Apply theme-resolved foreground colors to Treeview tag styles."""
+        self.tree.tag_configure("has_unreported", foreground=theme.resolve_color(theme.TAG_UNREPORTED))
+        self.tree.tag_configure("all_reported", foreground=theme.resolve_color(theme.TEXT_PRIMARY))
+        self.tree.tag_configure("unpaid", foreground=theme.resolve_color(theme.TAG_UNPAID))
+        self.tree.tag_configure("archived", foreground=theme.resolve_color(theme.TAG_ARCHIVED))
 
     def _update_summary(self) -> None:
         """Update aggregate unreported tasks count and total unreported duration."""

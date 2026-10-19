@@ -5,10 +5,13 @@ import logging
 import tkinter as tk
 from pathlib import Path
 from tkinter import filedialog, messagebox, ttk
-from typing import Optional
+from typing import Any, Optional, Union
+
+import customtkinter as ctk
 
 from time_clock.engine import TimeClockEngine
 from time_clock.events import EventBus
+from time_clock.gui import theme
 from time_clock.gui.add_earnings_dialog import AddEarningsDialog
 from time_clock.gui.clock_panel import ClockPanel
 from time_clock.gui.earnings_panel import EarningsPanel
@@ -26,17 +29,18 @@ class TimeClockApp:
 
     def __init__(
             self,
-            root: Optional[tk.Tk] = None,
+            root: Optional[Union[tk.Tk, ctk.CTk]] = None,
             engine: Optional[TimeClockEngine] = None,
             storage: Optional[Storage] = None,
             event_bus: Optional[EventBus] = None,
     ) -> None:
-        self.root = root or tk.Tk()
+        self.root = root or ctk.CTk()
         self._owns_root = root is None
         self.engine = engine or TimeClockEngine(storage=storage, event_bus=event_bus)
         self.storage = storage or self.engine.storage
         self._after_id: Optional[str] = None
 
+        theme.init_theme(appearance_mode="System")
         self._configure_window()
         self._setup_styles()
         self._build_menu()
@@ -45,18 +49,29 @@ class TimeClockApp:
 
     def _configure_window(self) -> None:
         self.root.title("Time Clock")
-        width = 1424
-        height = 680
-        self.root.minsize(820, 520)
+        target_width = 1540
+        target_height = 800
+        min_width = 920
+        min_height = 580
+        self.root.minsize(min_width, min_height)
         self.root.update_idletasks()
         try:
             screen_width = self.root.winfo_screenwidth()
             screen_height = self.root.winfo_screenheight()
+
+            # Adapt minsize if screen itself is below the target minimum
+            effective_min_w = min(min_width, screen_width)
+            effective_min_h = min(min_height, screen_height)
+            if effective_min_w != min_width or effective_min_h != min_height:
+                self.root.minsize(effective_min_w, effective_min_h)
+
+            width = min(target_width, screen_width)
+            height = min(target_height, screen_height)
             x = max(0, (screen_width - width) // 2)
             y = max(0, (screen_height - height) // 2)
             self.root.geometry(f"{width}x{height}+{x}+{y}")
         except Exception:
-            self.root.geometry(f"{width}x{height}")
+            self.root.geometry(f"{target_width}x{target_height}")
         self._set_app_icon()
 
     def _set_app_icon(self) -> None:
@@ -78,11 +93,37 @@ class TimeClockApp:
 
     def _setup_styles(self) -> None:
         self.style = ttk.Style(self.root)
-        available_themes = self.style.theme_names()
-        if "aqua" in available_themes:
-            self.style.theme_use("aqua")
-        elif "clam" in available_themes:
-            self.style.theme_use("clam")
+        theme.style_treeview(self.style)
+        try:
+            ctk.AppearanceModeTracker.add(self._on_appearance_mode_change)
+        except Exception as e:
+            logger.debug("Could not register appearance mode tracker callback: %s", e)
+
+        try:
+            self.root.bind("<Destroy>", self._on_root_destroyed, add="+")
+        except Exception:
+            pass
+
+    def _on_root_destroyed(self, event: Optional[tk.Event] = None) -> None:
+        if event is None or event.widget == self.root:
+            try:
+                ctk.AppearanceModeTracker.remove(self._on_appearance_mode_change)
+            except Exception:
+                pass
+
+    def _on_appearance_mode_change(self, *args: Any) -> None:
+        """Handle CustomTkinter appearance mode changes (Light/Dark) by re-styling TTK widgets and tags."""
+        try:
+            if not self.root or not self.root.winfo_exists():
+                return
+            if hasattr(self, "style") and self.style:
+                theme.style_treeview(self.style)
+            if hasattr(self, "task_panel") and self.task_panel and self.task_panel.winfo_exists():
+                self.task_panel.apply_tree_tags()
+            if hasattr(self, "history_panel") and self.history_panel and self.history_panel.winfo_exists():
+                self.history_panel.apply_tree_tags()
+        except Exception as e:
+            logger.debug("Error updating styles on appearance mode change: %s", e)
 
     def _build_menu(self) -> None:
         """Create the top menu bar with File operations and Advanced tools."""
@@ -265,42 +306,66 @@ class TimeClockApp:
 
     def _build_layout(self) -> None:
         # Top Navigation Header with View Switcher
-        self.nav_header = ttk.Frame(self.root, padding=(12, 10, 12, 4))
+        self.nav_header = ctk.CTkFrame(
+            self.root,
+            corner_radius=0,
+            fg_color=theme.BG_HEADER,
+            height=46,
+        )
         self.nav_header.pack(fill=tk.X, side=tk.TOP)
 
         self.view_title_var = tk.StringVar(value="⏱️ Time Clock")
-        self.view_title_lbl = ttk.Label(
+        self.view_title_lbl = ctk.CTkLabel(
             self.nav_header,
             textvariable=self.view_title_var,
-            font=("Helvetica", 12, "bold"),
+            font=theme.get_font(17, weight="bold"),
+            text_color=theme.TEXT_PRIMARY,
         )
-        self.view_title_lbl.pack(side=tk.LEFT)
+        self.view_title_lbl.pack(side=tk.LEFT, padx=(16, 8), pady=8)
 
-        self.view_toggle_btn = ttk.Button(
+        # Sleek CTkSegmentedButton switcher
+        self.segmented_nav = ctk.CTkSegmentedButton(
+            self.nav_header,
+            values=["Time Clock", "Earnings & Goals"],
+            command=self._on_segmented_nav_change,
+            font=theme.get_font(13, weight="bold"),
+            selected_color=theme.PRIMARY,
+            selected_hover_color=theme.PRIMARY_HOVER,
+            corner_radius=theme.RADIUS_BUTTON,
+        )
+        self.segmented_nav.set("Time Clock")
+        self.segmented_nav.pack(side=tk.RIGHT, padx=16, pady=8)
+
+        # Auxiliary view toggle button for programmatic access and backwards compatibility
+        self.view_toggle_btn = ctk.CTkButton(
             self.nav_header,
             text="Switch to Earnings View",
             command=self.toggle_view,
+            font=theme.get_font(13),
+            corner_radius=theme.RADIUS_BUTTON,
+            fg_color=theme.BG_SECONDARY_BTN,
+            hover_color=theme.BG_SECONDARY_BTN_HOVER,
+            text_color=theme.TEXT_PRIMARY,
         )
-        self.view_toggle_btn.pack(side=tk.RIGHT)
 
         # Content Container for stackable views
-        self.content_container = ttk.Frame(self.root)
-        self.content_container.pack(fill=tk.BOTH, expand=True)
+        self.content_container = ctk.CTkFrame(self.root, fg_color="transparent")
+        self.content_container.pack(fill=tk.BOTH, expand=True, padx=12, pady=12)
 
         # 1. Time Clock View Container
-        self.timeclock_view = ttk.Frame(self.content_container, padding=(12, 4, 12, 12))
+        self.timeclock_view = ctk.CTkFrame(self.content_container, fg_color="transparent")
         self.timeclock_view.pack(fill=tk.BOTH, expand=True)
 
         # Left Column: TaskPanel
         self.task_panel = TaskPanel(self.timeclock_view, self.engine)
-        self.task_panel.pack(side=tk.LEFT, fill=tk.BOTH, expand=True, padx=(0, 8))
+        self.task_panel.pack(side=tk.LEFT, fill=tk.BOTH, expand=True, padx=(0, 6))
 
         # Right Column: ClockPanel & HistoryPanel
-        right_container = ttk.Frame(self.timeclock_view)
-        right_container.pack(side=tk.RIGHT, fill=tk.BOTH, expand=True, padx=(8, 0))
+        right_container = ctk.CTkFrame(self.timeclock_view, fg_color="transparent")
+        right_container.pack(side=tk.RIGHT, fill=tk.BOTH, expand=True, padx=(6, 0))
 
         self.clock_panel = ClockPanel(right_container, self.engine)
-        self.clock_panel.pack(side=tk.TOP, fill=tk.BOTH, expand=False, pady=(0, 8))
+        self.clock_panel.pack(side=tk.TOP, fill=tk.X, expand=False, pady=(0, 10))
 
         self.history_panel = HistoryPanel(right_container, self.engine)
         self.history_panel.pack(side=tk.BOTTOM, fill=tk.BOTH, expand=True)
@@ -311,6 +376,12 @@ class TimeClockApp:
 
         self.current_view = "time_clock"
 
+    def _on_segmented_nav_change(self, value: str) -> None:
+        if value == "Earnings & Goals":
+            self.show_earnings_view()
+        else:
+            self.show_timeclock_view()
+
     def show_timeclock_view(self) -> None:
         """Switch to the primary Time Clock view."""
         self.earnings_view.pack_forget()
@@ -318,6 +389,8 @@ class TimeClockApp:
         self.current_view = "time_clock"
         self.view_title_var.set("⏱️ Time Clock")
         self.view_toggle_btn.configure(text="Switch to Earnings View")
+        if hasattr(self, "segmented_nav") and self.segmented_nav.get() != "Time Clock":
+            self.segmented_nav.set("Time Clock")
         self.task_panel.refresh_task_list()
 
     def show_earnings_view(self) -> None:
@@ -327,6 +400,8 @@ class TimeClockApp:
         self.current_view = "earnings"
         self.view_title_var.set("💰 Earnings & Goals")
         self.view_toggle_btn.configure(text="Switch to Time Clock")
+        if hasattr(self, "segmented_nav") and self.segmented_nav.get() != "Earnings & Goals":
+            self.segmented_nav.set("Earnings & Goals")
         self.earnings_panel.refresh()
 
     def toggle_view(self) -> None:
@@ -352,6 +427,11 @@ class TimeClockApp:
 
     def on_close(self) -> None:
         """Handle window closing cleanly by stopping UI tick timers and closing storage."""
+        try:
+            ctk.AppearanceModeTracker.remove(self._on_appearance_mode_change)
+        except Exception:
+            pass
+
         if self._after_id:
             try:
                 self.root.after_cancel(self._after_id)

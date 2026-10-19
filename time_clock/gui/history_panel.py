@@ -4,30 +4,77 @@ from __future__ import annotations
 import logging
 import tkinter as tk
 from tkinter import filedialog, messagebox, ttk
-from typing import Optional
+from typing import Any, Optional
+
+import customtkinter as ctk
 
 from time_clock.engine import TimeClockEngine
 from time_clock.events import Event, EventType
+from time_clock.gui import theme
 from time_clock.models import Task, format_duration, parse_iso
 
 logger = logging.getLogger(__name__)
 
 
-class HistoryPanel(ttk.LabelFrame):
-    """Panel displaying historical session logs for the selected task."""
+class HistoryPanel(ctk.CTkFrame):
+    """Modernized card panel displaying historical session logs for the selected task."""
 
     def __init__(self, parent: tk.Widget, engine: TimeClockEngine) -> None:
-        super().__init__(parent, text="Session History", padding=10)
+        super().__init__(
+            parent,
+            corner_radius=theme.RADIUS_CARD,
+            fg_color=theme.BG_CARD,
+            border_width=1,
+            border_color=theme.BORDER_CARD,
+        )
         self.engine = engine
 
         self._build_ui()
         self._register_events()
         self.refresh_history()
 
+    def configure(self, require_redraw: bool = False, **kwargs: Any) -> Any:
+        if "text" in kwargs:
+            text_val = kwargs.pop("text")
+            if hasattr(self, "_title_var"):
+                self._title_var.set(text_val)
+            elif hasattr(self, "_title_label") and self._title_label:
+                self._title_label.configure(text=text_val)
+        if kwargs:
+            return super().configure(require_redraw=require_redraw, **kwargs)
+        return None
+
+    config = configure
+
+    def cget(self, attribute_name: str) -> Any:
+        if attribute_name == "text":
+            if hasattr(self, "_title_var"):
+                return self._title_var.get()
+            elif hasattr(self, "_title_label") and self._title_label:
+                return self._title_label.cget("text")
+        return super().cget(attribute_name)
+
+    def __getitem__(self, key: str) -> Any:
+        return self.cget(key)
+
     def _build_ui(self) -> None:
-        # History Table / Treeview
-        table_frame = ttk.Frame(self)
-        table_frame.pack(fill=tk.BOTH, expand=True)
+        # Header Section
+        header_frame = ctk.CTkFrame(self, fg_color="transparent")
+        header_frame.pack(fill=tk.X, padx=12, pady=(12, 8))
+
+        self._title_var = tk.StringVar(value="Session History")
+        self._title_label = ctk.CTkLabel(
+            header_frame,
+            textvariable=self._title_var,
+            font=theme.get_font(13, weight="bold"),
+            text_color=theme.TEXT_PRIMARY,
+            anchor="w",
+        )
+        self._title_label.pack(side=tk.LEFT)
+
+        # History Table / Treeview Section
+        table_frame = ctk.CTkFrame(self, fg_color="transparent")
+        table_frame.pack(fill=tk.BOTH, expand=True, padx=12, pady=(0, 6))
 
         columns = ("index", "start", "end", "duration")
         self.tree = ttk.Treeview(
@@ -35,7 +82,7 @@ class HistoryPanel(ttk.LabelFrame):
             columns=columns,
             show="headings",
             selectmode="browse",
-            height=6
+            height=6,
         )
 
         self.tree.heading("index", text="#")
@@ -48,8 +95,7 @@ class HistoryPanel(ttk.LabelFrame):
         self.tree.column("end", width=145, anchor=tk.W)
         self.tree.column("duration", width=80, anchor=tk.E)
 
-        self.tree.tag_configure("reported", foreground="#888888")
-        self.tree.tag_configure("unreported", foreground="")
+        self.apply_tree_tags()
 
         scrollbar = ttk.Scrollbar(table_frame, orient=tk.VERTICAL, command=self.tree.yview)
         self.tree.configure(yscrollcommand=scrollbar.set)
@@ -58,23 +104,30 @@ class HistoryPanel(ttk.LabelFrame):
         scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
 
         # Footer frame with summary and export button
-        footer_frame = ttk.Frame(self)
-        footer_frame.pack(fill=tk.X, pady=(6, 0))
+        footer_frame = ctk.CTkFrame(self, fg_color="transparent")
+        footer_frame.pack(fill=tk.X, padx=12, pady=(0, 12))
 
-        self.export_btn = ttk.Button(
+        self.export_btn = ctk.CTkButton(
             footer_frame,
             text="Export...",
-            width=10,
+            width=80,
+            height=28,
             command=self._on_export_clicked,
+            corner_radius=theme.RADIUS_BUTTON,
+            fg_color=theme.BG_SECONDARY_BTN,
+            hover_color=theme.BG_SECONDARY_BTN_HOVER,
+            text_color=theme.TEXT_PRIMARY,
+            font=theme.get_font(11),
         )
         self.export_btn.pack(side=tk.LEFT)
 
         self.summary_var = tk.StringVar(value="Sessions: 0 | Total: 00:00:00 | Unreported: 00:00:00")
-        summary_lbl = ttk.Label(
+        summary_lbl = ctk.CTkLabel(
             footer_frame,
             textvariable=self.summary_var,
-            font=("Helvetica", 9, "italic"),
-            anchor=tk.E,
+            font=theme.get_font(10),
+            text_color=theme.TEXT_MUTED,
+            anchor="e",
         )
         summary_lbl.pack(side=tk.RIGHT, fill=tk.X, expand=True)
 
@@ -110,6 +163,11 @@ class HistoryPanel(ttk.LabelFrame):
                 parent=self.winfo_toplevel(),
             )
             return None
+
+    def apply_tree_tags(self) -> None:
+        """Apply theme-resolved foreground colors to Treeview tag styles."""
+        self.tree.tag_configure("reported", foreground=theme.resolve_color(theme.TAG_REPORTED))
+        self.tree.tag_configure("unreported", foreground=theme.resolve_color(theme.TEXT_PRIMARY))
 
     def _register_events(self) -> None:
         self.engine.event_bus.subscribe(EventType.TASK_CREATED, self._on_task_created_event)

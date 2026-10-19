@@ -6,14 +6,15 @@ This document contains project-specific information, setup instructions, testing
 
 ## 1. Project Overview & Architecture
 
-**Time Clock** is a modular Python desktop time tracking application with zero external runtime dependencies. It uses a decoupled, event-driven architecture structured as follows:
+**Time Clock** is a modular Python desktop time tracking application with a modern CustomTkinter interface. It uses a decoupled, event-driven architecture structured as follows:
 
 - **`time_clock/models.py`**: Domain dataclasses (`TimeEntry`, `Task`, `AppState`, `EarningEntry`, `MonthlyGoal`, `EarningsPeriodStats`) with explicit dictionary serialization/deserialization methods (`to_dict` / `from_dict`) and duration/ISO-8601 formatting utilities (`format_duration`, `iso_now`, `parse_iso`).
 - **`time_clock/config.py`**: `AppConfig` runtime configuration manager loading settings from `~/.config/time_clock/config.json` (or `TIME_CLOCK_CONFIG` / `TIME_CLOCK_DB` environment variables) with default database path pointing to `~/Library/Application Support/TimeClock/time_clock.db` and automatic directory/file generation.
 - **`time_clock/storage.py`**: `SQLiteStorage` (and base `Storage`) persisting domain state to SQLite database (default: resolved from `AppConfig.db_path`) with automatic table creation (`tasks`, `time_entries`, `app_state`, `earnings`, `monthly_goals`), foreign key reassignment (`reassign_task_data`), and legacy JSON migration handling.
 - **`time_clock/events.py`**: In-process synchronous publish-subscribe `EventBus` using the `EventType` enum (`TASK_*`, `CLOCK_IN`, `CLOCK_OUT`, `TICK`, `ENTRY_UPDATED`, `EARNING_ADDED`, `EARNING_DELETED`, `GOAL_UPDATED`, `TASKS_CONSOLIDATED`, `STATE_LOADED`, `STATE_SAVED`) for decoupling the business logic from GUI components.
 - **`time_clock/engine.py`**: `TimeClockEngine` coordinator implementing business rules (clocking in/out, task CRUD, task consolidation `consolidate_tasks_by_name`, updating active/completed session timestamps, duration calculations, active timer tracking, earnings tracking, monthly goal configuration, and daily needed calculations) and emitting lifecycle events.
-- **`time_clock/gui/`**: Tkinter/ttk desktop interface divided into modular panels:
+- **`time_clock/gui/`**: CustomTkinter and Tkinter/ttk desktop interface divided into modular panels:
+  - `theme.py`: Centralized design system defining color palettes, typography scales, corner radii, spacing, mode helpers, and TTK style integrations.
   - `app.py`: `TimeClockApp` main window and container with top header view switcher, `File`, `View`, and `Advanced` (including "Consolidate Tasks with the Same Name") menu bars, and window/dock icon configuration.
   - `add_earnings_dialog.py`: `AddEarningsDialog` modal for logging task-associated earnings with customizable date entry defaulting to today.
   - `earnings_goal_dialog.py`: `EarningsGoalDialog` modal for setting monthly earnings target and toggling the 4-week (28-day) month mode.
@@ -37,7 +38,13 @@ This document contains project-specific information, setup instructions, testing
 
 ### Prerequisites
 - Python 3.8+ (standard installation including `tkinter`).
-- No external packages (pip dependencies or virtual environments) are required for core execution or testing.
+- Permissive dependencies specified in `requirements.txt` (`customtkinter>=5.2.0`).
+
+### Installation & Environment Setup
+From the repository root:
+```bash
+pip install -r requirements.txt
+```
 
 ### Running the Application
 From the repository root:

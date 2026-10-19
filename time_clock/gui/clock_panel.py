@@ -2,152 +2,247 @@
 from __future__ import annotations
 
 import tkinter as tk
-from tkinter import messagebox, ttk
-from typing import Optional
+from tkinter import messagebox
+from typing import Any
+
+import customtkinter as ctk
 
 from time_clock.engine import TimeClockEngine
 from time_clock.events import Event, EventType
+from time_clock.gui import theme
 from time_clock.gui.add_earnings_dialog import AddEarningsDialog
-from time_clock.models import Task, format_duration
+from time_clock.models import format_duration
 
 
-class ClockPanel(ttk.LabelFrame):
-    """Panel featuring live timer, start timestamps, status indicators, and clock in/out action."""
+class ClockPanel(ctk.CTkFrame):
+    """Hero timer card featuring live timer, start timestamps, status indicators, and clock in/out action."""
 
     def __init__(self, parent: tk.Widget, engine: TimeClockEngine) -> None:
-        super().__init__(parent, text="Clock Tracker", padding=15)
+        super().__init__(
+            parent,
+            corner_radius=theme.RADIUS_CARD,
+            fg_color=theme.BG_CARD,
+            border_width=1,
+            border_color=theme.BORDER_CARD,
+        )
         self.engine = engine
 
         self._build_ui()
         self._register_events()
         self.refresh_display()
 
+    def configure(self, require_redraw: bool = False, **kwargs: Any) -> Any:
+        if "text" in kwargs:
+            text_val = kwargs.pop("text")
+            if hasattr(self, "_header_lbl") and self._header_lbl:
+                self._header_lbl.configure(text=text_val)
+        if kwargs:
+            return super().configure(require_redraw=require_redraw, **kwargs)
+        return None
+
+    config = configure
+
+    def cget(self, attribute_name: str) -> Any:
+        if attribute_name == "text":
+            if hasattr(self, "_header_lbl") and self._header_lbl:
+                return self._header_lbl.cget("text")
+        return super().cget(attribute_name)
+
+    def __getitem__(self, key: str) -> Any:
+        return self.cget(key)
+
     def _build_ui(self) -> None:
+        # Header / Section Title
+        self._header_lbl = ctk.CTkLabel(
+            self,
+            text="Clock Tracker",
+            font=theme.get_font(11, weight="bold"),
+            text_color=theme.TEXT_MUTED,
+            anchor="center",
+        )
+        self._header_lbl.pack(fill=tk.X, pady=(10, 2))
+
         # Active Task Label
         self.task_title_var = tk.StringVar(value="No Task Selected")
-        task_label = ttk.Label(
+        self.task_label = ctk.CTkLabel(
             self,
             textvariable=self.task_title_var,
-            font=("Helvetica", 14, "bold"),
-            anchor=tk.CENTER
+            font=theme.get_font(15, weight="bold"),
+            text_color=theme.TEXT_PRIMARY,
+            anchor="center",
         )
-        task_label.pack(fill=tk.X, pady=(0, 5))
+        self.task_label.pack(fill=tk.X, pady=(0, 2))
 
         # Status Label (Clocked In / Clocked Out)
         self.status_var = tk.StringVar(value="Status: Idle (Clocked Out)")
-        self.status_label = ttk.Label(
+        self.status_label = ctk.CTkLabel(
             self,
             textvariable=self.status_var,
-            font=("Helvetica", 11),
-            anchor=tk.CENTER
+            font=theme.get_font(11, weight="bold"),
+            text_color=theme.MUTED,
+            anchor="center",
         )
-        self.status_label.pack(fill=tk.X, pady=(0, 5))
+        self.status_label.pack(fill=tk.X, pady=(0, 2))
 
         # Start Time Label
         self.start_time_var = tk.StringVar(value="Start Time: --")
-        start_time_lbl = ttk.Label(
+        self.start_time_lbl = ctk.CTkLabel(
             self,
             textvariable=self.start_time_var,
-            font=("Helvetica", 10),
-            anchor=tk.CENTER
+            font=theme.get_font(10),
+            text_color=theme.TEXT_SECONDARY,
+            anchor="center",
         )
-        start_time_lbl.pack(fill=tk.X, pady=(0, 10))
+        self.start_time_lbl.pack(fill=tk.X, pady=(0, 6))
 
-        # Large Digital Elapsed Stopwatch Display
+        # Large Digital Elapsed Stopwatch Display (Hero Display)
         self.timer_var = tk.StringVar(value="00:00:00")
-        timer_lbl = ttk.Label(
+        self.timer_lbl = ctk.CTkLabel(
             self,
             textvariable=self.timer_var,
-            font=("Helvetica", 32, "bold"),
-            anchor=tk.CENTER
+            font=theme.get_font(36, weight="bold", mono=True),
+            text_color=theme.TEXT_PRIMARY,
+            anchor="center",
         )
-        timer_lbl.pack(fill=tk.X, pady=(5, 10))
+        self.timer_lbl.pack(fill=tk.X, pady=(2, 6))
 
         # Unreported Time Spent Label
         self.unreported_time_var = tk.StringVar(value="Unreported Time: 00:00:00")
-        unreported_time_lbl = ttk.Label(
+        self.unreported_time_lbl = ctk.CTkLabel(
             self,
             textvariable=self.unreported_time_var,
-            font=("Helvetica", 11, "bold"),
-            anchor=tk.CENTER
+            font=theme.get_font(11, weight="bold"),
+            text_color=theme.TAG_UNREPORTED,
+            anchor="center",
         )
-        unreported_time_lbl.pack(fill=tk.X, pady=(0, 3))
+        self.unreported_time_lbl.pack(fill=tk.X, pady=(0, 2))
 
         # Total Time Spent Label
         self.total_time_var = tk.StringVar(value="Total Time: 00:00:00")
-        total_time_lbl = ttk.Label(
+        self.total_time_lbl = ctk.CTkLabel(
             self,
             textvariable=self.total_time_var,
-            font=("Helvetica", 10),
-            anchor=tk.CENTER
+            font=theme.get_font(10),
+            text_color=theme.TEXT_SECONDARY,
+            anchor="center",
         )
-        total_time_lbl.pack(fill=tk.X, pady=(0, 3))
+        self.total_time_lbl.pack(fill=tk.X, pady=(0, 2))
 
         # Last Reported Timestamp Label
         self.last_reported_var = tk.StringVar(value="Last Reported: Never")
-        last_reported_lbl = ttk.Label(
+        self.last_reported_lbl = ctk.CTkLabel(
             self,
             textvariable=self.last_reported_var,
-            font=("Helvetica", 9, "italic"),
-            anchor=tk.CENTER
+            font=theme.get_font(9),
+            text_color=theme.TEXT_MUTED,
+            anchor="center",
         )
-        last_reported_lbl.pack(fill=tk.X, pady=(0, 10))
+        self.last_reported_lbl.pack(fill=tk.X, pady=(0, 8))
 
-        # All Tasks Period Summary Section
-        period_frame = ttk.LabelFrame(self, text="All Tasks Summary", padding=6)
-        period_frame.pack(fill=tk.X, pady=(0, 12))
+        # All Tasks Period Summary Chips (Day, Week, Month)
+        self.summary_caption_lbl = ctk.CTkLabel(
+            self,
+            text="All Tasks Summary",
+            font=theme.get_font(10, weight="bold"),
+            text_color=theme.TEXT_MUTED,
+            anchor="center",
+        )
+        self.summary_caption_lbl.pack(fill=tk.X, pady=(0, 2))
 
-        period_cols = ttk.Frame(period_frame)
-        period_cols.pack(fill=tk.X, expand=True)
+        period_frame = ctk.CTkFrame(
+            self,
+            fg_color="transparent",
+        )
+        period_frame.pack(fill=tk.X, padx=12, pady=(0, 10))
 
         self.day_time_var = tk.StringVar(value="Day: 00:00:00")
         self.week_time_var = tk.StringVar(value="Week: 00:00:00")
         self.month_time_var = tk.StringVar(value="Month: 00:00:00")
 
-        self.day_label = ttk.Label(
-            period_cols,
+        # Day Chip
+        day_chip = ctk.CTkFrame(
+            period_frame,
+            corner_radius=theme.RADIUS_CHIP,
+            fg_color=theme.BG_APP,
+            border_width=1,
+            border_color=theme.BORDER_CARD,
+        )
+        day_chip.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=(0, 3))
+        self.day_label = ctk.CTkLabel(
+            day_chip,
             textvariable=self.day_time_var,
-            font=("Helvetica", 10, "bold"),
-            anchor=tk.CENTER,
+            font=theme.get_font(10, weight="bold"),
+            text_color=theme.TEXT_PRIMARY,
+            anchor="center",
         )
-        self.day_label.pack(side=tk.LEFT, fill=tk.X, expand=True)
+        self.day_label.pack(fill=tk.BOTH, expand=True, padx=4, pady=3)
 
-        self.week_label = ttk.Label(
-            period_cols,
+        # Week Chip
+        week_chip = ctk.CTkFrame(
+            period_frame,
+            corner_radius=theme.RADIUS_CHIP,
+            fg_color=theme.BG_APP,
+            border_width=1,
+            border_color=theme.BORDER_CARD,
+        )
+        week_chip.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=2)
+        self.week_label = ctk.CTkLabel(
+            week_chip,
             textvariable=self.week_time_var,
-            font=("Helvetica", 10, "bold"),
-            anchor=tk.CENTER,
+            font=theme.get_font(10, weight="bold"),
+            text_color=theme.TEXT_PRIMARY,
+            anchor="center",
         )
-        self.week_label.pack(side=tk.LEFT, fill=tk.X, expand=True)
+        self.week_label.pack(fill=tk.BOTH, expand=True, padx=4, pady=3)
 
-        self.month_label = ttk.Label(
-            period_cols,
-            textvariable=self.month_time_var,
-            font=("Helvetica", 10, "bold"),
-            anchor=tk.CENTER,
+        # Month Chip
+        month_chip = ctk.CTkFrame(
+            period_frame,
+            corner_radius=theme.RADIUS_CHIP,
+            fg_color=theme.BG_APP,
+            border_width=1,
+            border_color=theme.BORDER_CARD,
         )
-        self.month_label.pack(side=tk.LEFT, fill=tk.X, expand=True)
+        month_chip.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=(3, 0))
+        self.month_label = ctk.CTkLabel(
+            month_chip,
+            textvariable=self.month_time_var,
+            font=theme.get_font(10, weight="bold"),
+            text_color=theme.TEXT_PRIMARY,
+            anchor="center",
+        )
+        self.month_label.pack(fill=tk.BOTH, expand=True, padx=4, pady=3)
 
         # Action Buttons Section
-        btn_frame = ttk.Frame(self)
-        btn_frame.pack(fill=tk.X, pady=(0, 0))
+        btn_frame = ctk.CTkFrame(self, fg_color="transparent")
+        btn_frame.pack(fill=tk.X, padx=12, pady=(0, 12))
 
         # Primary Clock In / Clock Out Button
-        self.toggle_btn = ttk.Button(
+        self.toggle_btn = ctk.CTkButton(
             btn_frame,
             text="Clock In",
             command=self._on_toggle_clock,
-            style="Accent.TButton" if "Accent.TButton" in ttk.Style().theme_names() else "TButton"
+            corner_radius=theme.RADIUS_BUTTON,
+            fg_color=theme.SUCCESS,
+            hover_color=theme.SUCCESS_HOVER,
+            font=theme.get_font(12, weight="bold"),
+            height=34,
         )
-        self.toggle_btn.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=(0, 5), ipady=6)
+        self.toggle_btn.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=(0, 4))
 
         # Mark Reported Button
-        self.report_btn = ttk.Button(
+        self.report_btn = ctk.CTkButton(
             btn_frame,
             text="Mark Reported",
             command=self._on_report_clicked,
+            corner_radius=theme.RADIUS_BUTTON,
+            fg_color=theme.BG_SECONDARY_BTN,
+            hover_color=theme.BG_SECONDARY_BTN_HOVER,
+            text_color=theme.TEXT_PRIMARY,
+            font=theme.get_font(12),
+            height=34,
         )
-        self.report_btn.pack(side=tk.RIGHT, fill=tk.X, expand=True, ipady=6)
+        self.report_btn.pack(side=tk.RIGHT, fill=tk.X, expand=True, padx=(4, 0))
 
     def _register_events(self) -> None:
         self.engine.event_bus.subscribe(EventType.TASK_CREATED, self._on_task_created_event)
@@ -226,7 +321,12 @@ class ClockPanel(ttk.LabelFrame):
 
         if self.engine.state.is_running:
             self.status_var.set("● Clocked In (Running)")
-            self.toggle_btn.configure(text="Clock Out")
+            self.status_label.configure(text_color=theme.SUCCESS)
+            self.toggle_btn.configure(
+                text="Clock Out",
+                fg_color=theme.DANGER,
+                hover_color=theme.DANGER_HOVER,
+            )
             start_display = (self.engine.state.current_session_start or "--").split(".")[0].replace("T", " ")
             self.start_time_var.set(f"Start Time: {start_display}")
             session_dur = self.engine.get_current_session_duration()
@@ -238,7 +338,12 @@ class ClockPanel(ttk.LabelFrame):
                 self.unreported_time_var.set(f"Unreported Time: {format_duration(unreported_duration)}")
         else:
             self.status_var.set("○ Idle (Clocked Out)")
-            self.toggle_btn.configure(text="Clock In")
+            self.status_label.configure(text_color=theme.MUTED)
+            self.toggle_btn.configure(
+                text="Clock In",
+                fg_color=theme.SUCCESS,
+                hover_color=theme.SUCCESS_HOVER,
+            )
             self.start_time_var.set("Start Time: --")
             self.timer_var.set("00:00:00")
             self.total_time_var.set(f"Total Time: {format_duration(total_duration)}")

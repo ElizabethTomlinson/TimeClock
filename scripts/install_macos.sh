@@ -46,6 +46,21 @@ elif command -v python3 >/dev/null 2>&1; then
     INSTALL_PYTHON="$(command -v python3)"
 fi
 
+# Ensure Python requirements are installed into the execution environment
+if [[ -n "$INSTALL_PYTHON" && -f "$REPO_ROOT/requirements.txt" ]]; then
+    echo "Installing application dependencies with $INSTALL_PYTHON..."
+    "$INSTALL_PYTHON" -m pip install --quiet -r "$REPO_ROOT/requirements.txt" || \
+    "$INSTALL_PYTHON" -m pip install --user --quiet -r "$REPO_ROOT/requirements.txt" || \
+    "$INSTALL_PYTHON" -m pip install --user --break-system-packages --quiet -r "$REPO_ROOT/requirements.txt" || true
+
+    if ! "$INSTALL_PYTHON" -c "import customtkinter" >/dev/null 2>&1; then
+        echo "Error: Failed to install required dependencies into $INSTALL_PYTHON." >&2
+        echo "Please install dependencies manually using:" >&2
+        echo "    $INSTALL_PYTHON -m pip install -r \"$REPO_ROOT/requirements.txt\"" >&2
+        exit 1
+    fi
+fi
+
 # 2. Create bundle directory hierarchy
 mkdir -p "$MACOS_DIR"
 mkdir -p "$RESOURCES_DIR/assets"
@@ -116,17 +131,44 @@ CANDIDATES=(
 )
 
 PYTHON_CMD=""
+# Pass 1: Prefer candidate that already has both tkinter and customtkinter working
 for candidate in "\${CANDIDATES[@]}"; do
     if [ -n "\$candidate" ] && [ -x "\$candidate" ]; then
-        if "\$candidate" -c "import tkinter" >/dev/null 2>&1; then
+        if "\$candidate" -c "import tkinter, customtkinter" >/dev/null 2>&1; then
             PYTHON_CMD="\$candidate"
             break
         fi
     fi
 done
 
+# Pass 2: Fallback to any candidate with tkinter
+if [ -z "\$PYTHON_CMD" ]; then
+    for candidate in "\${CANDIDATES[@]}"; do
+        if [ -n "\$candidate" ] && [ -x "\$candidate" ]; then
+            if "\$candidate" -c "import tkinter" >/dev/null 2>&1; then
+                PYTHON_CMD="\$candidate"
+                break
+            fi
+        fi
+    done
+fi
+
 if [ -z "\$PYTHON_CMD" ]; then
     osascript -e 'display alert "Python 3 Required" message "Time Clock requires Python 3 with Tkinter to run. Please install Python 3 from python.org or Homebrew."'
+    exit 1
+fi
+
+# Ensure customtkinter dependency is present in selected runtime
+if ! "\$PYTHON_CMD" -c "import customtkinter" >/dev/null 2>&1; then
+    if [ -f "\$RESOURCES_DIR/requirements.txt" ]; then
+        "\$PYTHON_CMD" -m pip install --quiet -r "\$RESOURCES_DIR/requirements.txt" >/dev/null 2>&1 || \
+        "\$PYTHON_CMD" -m pip install --user --quiet -r "\$RESOURCES_DIR/requirements.txt" >/dev/null 2>&1 || \
+        "\$PYTHON_CMD" -m pip install --user --break-system-packages --quiet -r "\$RESOURCES_DIR/requirements.txt" >/dev/null 2>&1 || true
+    fi
+fi
+
+if ! "\$PYTHON_CMD" -c "import customtkinter" >/dev/null 2>&1; then
+    osascript -e "display alert \"CustomTkinter Dependency Required\" message \"Time Clock requires the 'customtkinter' library. Please install it using:\n\$PYTHON_CMD -m pip install -r '\$RESOURCES_DIR/requirements.txt'\""
     exit 1
 fi
 
@@ -142,6 +184,9 @@ echo "Copying application resources..."
 rm -rf "$RESOURCES_DIR/time_clock"
 cp -R "$REPO_ROOT/time_clock" "$RESOURCES_DIR/"
 cp "$REPO_ROOT/main.py" "$RESOURCES_DIR/"
+if [[ -f "$REPO_ROOT/requirements.txt" ]]; then
+    cp "$REPO_ROOT/requirements.txt" "$RESOURCES_DIR/"
+fi
 
 if [[ -f "$REPO_ROOT/assets/AppIcon.icns" ]]; then
     cp "$REPO_ROOT/assets/AppIcon.icns" "$RESOURCES_DIR/"

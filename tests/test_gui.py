@@ -9,6 +9,7 @@ from unittest.mock import patch
 
 from time_clock.engine import TimeClockEngine
 from time_clock.events import EventBus
+from time_clock.gui import theme
 from time_clock.gui.app import TimeClockApp
 from time_clock.gui.edit_session_dialog import EditClockInOutDialog
 from time_clock.gui.prompt_dialog import InputDialog, ask_string
@@ -16,7 +17,7 @@ from time_clock.gui.stats_calendar_dialog import StatsCalendarDialog
 from time_clock.gui.task_options_dialog import TaskOptionsDialog, ask_task_options
 from time_clock.models import TimeEntry
 from time_clock.storage import SQLiteStorage
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta
 
 
 class TestGUI(unittest.TestCase):
@@ -351,7 +352,26 @@ class TestGUI(unittest.TestCase):
     def test_app_window_configuration(self):
         app = TimeClockApp(root=self.root, engine=self.engine)
         self.assertEqual(self.root.title(), "Time Clock")
-        self.assertEqual(self.root.minsize(), (820, 520))
+        self.assertEqual(self.root.minsize(), (920, 580))
+
+    def test_app_header_navigation_typography(self):
+        """Verify navigation header title, segmented button, and toggle button use scaled typography."""
+        app = TimeClockApp(root=self.root, engine=self.engine)
+        self.root.update_idletasks()
+
+        # view_title_lbl should use 17pt bold
+        title_font = app.view_title_lbl.cget("font")
+        self.assertEqual(title_font.cget("size"), 17)
+        self.assertEqual(title_font.cget("weight"), "bold")
+
+        # segmented_nav should use 13pt bold
+        nav_font = app.segmented_nav.cget("font")
+        self.assertEqual(nav_font.cget("size"), 13)
+        self.assertEqual(nav_font.cget("weight"), "bold")
+
+        # view_toggle_btn should use 13pt
+        toggle_font = app.view_toggle_btn.cget("font")
+        self.assertEqual(toggle_font.cget("size"), 13)
 
     def test_task_panel_show_archived_filter(self):
         app = TimeClockApp(root=self.root, engine=self.engine)
@@ -680,8 +700,61 @@ class TestGUI(unittest.TestCase):
         app = TimeClockApp(root=self.root, engine=self.engine)
         self.root.update_idletasks()
         geom = self.root.geometry()
-        # Geometry should start with 1424x680 and have offset coordinates
-        self.assertTrue(geom.startswith("1424x680"))
+        # Geometry should start with 1540x800 and have offset coordinates
+        self.assertTrue(geom.startswith("1540x800"))
+
+    def test_app_window_configuration_centering_display_scenarios(self):
+        """Test window centering calculations across various screen dimensions."""
+        # 1. Standard 1080p display (1920x1080)
+        with patch.object(self.root, "winfo_screenwidth", return_value=1920), \
+             patch.object(self.root, "winfo_screenheight", return_value=1080), \
+             patch.object(self.root, "geometry") as mock_geom:
+            app = TimeClockApp(root=self.root, engine=self.engine)
+            # x = (1920 - 1540) // 2 = 190, y = (1080 - 800) // 2 = 140
+            mock_geom.assert_called_with("1540x800+190+140")
+            self.assertEqual(self.root.minsize(), (920, 580))
+
+        # 2. High-DPI 4K display (3840x2160)
+        with patch.object(self.root, "winfo_screenwidth", return_value=3840), \
+             patch.object(self.root, "winfo_screenheight", return_value=2160), \
+             patch.object(self.root, "geometry") as mock_geom:
+            app = TimeClockApp(root=self.root, engine=self.engine)
+            # x = (3840 - 1540) // 2 = 1150, y = (2160 - 800) // 2 = 680
+            mock_geom.assert_called_with("1540x800+1150+680")
+            self.assertEqual(self.root.minsize(), (920, 580))
+
+        # 3. Slightly larger than target dimensions (1600x900)
+        with patch.object(self.root, "winfo_screenwidth", return_value=1600), \
+             patch.object(self.root, "winfo_screenheight", return_value=900), \
+             patch.object(self.root, "geometry") as mock_geom:
+            app = TimeClockApp(root=self.root, engine=self.engine)
+            # x = (1600 - 1540) // 2 = 30, y = (900 - 800) // 2 = 50
+            mock_geom.assert_called_with("1540x800+30+50")
+            self.assertEqual(self.root.minsize(), (920, 580))
+
+        # 4. Smaller screen bounded by screen bounds (1366x768)
+        with patch.object(self.root, "winfo_screenwidth", return_value=1366), \
+             patch.object(self.root, "winfo_screenheight", return_value=768), \
+             patch.object(self.root, "geometry") as mock_geom:
+            app = TimeClockApp(root=self.root, engine=self.engine)
+            # width clamped to 1366, height clamped to 768; x = 0, y = 0
+            mock_geom.assert_called_with("1366x768+0+0")
+            self.assertEqual(self.root.minsize(), (920, 580))
+
+        # 5. Screen below minimum dimensions (800x500) adapting minsize
+        with patch.object(self.root, "winfo_screenwidth", return_value=800), \
+             patch.object(self.root, "winfo_screenheight", return_value=500), \
+             patch.object(self.root, "geometry") as mock_geom:
+            app = TimeClockApp(root=self.root, engine=self.engine)
+            # minsize adapts to (800, 500); width clamped to 800, height clamped to 500; x = 0, y = 0
+            mock_geom.assert_called_with("800x500+0+0")
+            self.assertEqual(self.root.minsize(), (800, 500))
+
+        # 6. Error querying display dimensions fallback
+        with patch.object(self.root, "winfo_screenwidth", side_effect=tk.TclError("Display query failed")), \
+             patch.object(self.root, "geometry") as mock_geom:
+            app = TimeClockApp(root=self.root, engine=self.engine)
+            mock_geom.assert_called_with("1540x800")
 
     @patch.object(InputDialog, "wait_window")
     def test_input_dialog_ok(self, mock_wait):
@@ -1446,6 +1519,173 @@ class TestGUI(unittest.TestCase):
         self.engine.rename_task(t3.id, "AAA")
         self.root.update_idletasks()
         self.assertEqual(list(panel.tree.get_children()), [t3.id, t2.id, t1.id])
+
+    def test_init_theme_does_not_call_root_lower(self):
+        """Verify TimeClockApp does not invoke root.lower() during theme initialization."""
+        with patch.object(self.root, "lower", wraps=self.root.lower) as mock_lower:
+            app = TimeClockApp(root=self.root, engine=self.engine)
+            mock_lower.assert_not_called()
+
+    def test_app_segmented_nav_view_switching(self):
+        """Test switching views using the CTkSegmentedButton switcher and verify two-way synchronization."""
+        app = TimeClockApp(root=self.root, engine=self.engine)
+        self.root.update_idletasks()
+
+        self.assertEqual(app.segmented_nav.get(), "Time Clock")
+        self.assertEqual(app.current_view, "time_clock")
+
+        # Switch to Earnings & Goals via segmented nav callback
+        app._on_segmented_nav_change("Earnings & Goals")
+        self.root.update_idletasks()
+        self.assertEqual(app.current_view, "earnings")
+        self.assertEqual(app.segmented_nav.get(), "Earnings & Goals")
+        self.assertEqual(app.view_title_var.get(), "💰 Earnings & Goals")
+
+        # Programmatic show_timeclock_view keeps segmented control in sync
+        app.show_timeclock_view()
+        self.root.update_idletasks()
+        self.assertEqual(app.current_view, "time_clock")
+        self.assertEqual(app.segmented_nav.get(), "Time Clock")
+        self.assertEqual(app.view_title_var.get(), "⏱️ Time Clock")
+
+        # Programmatic show_earnings_view keeps segmented control in sync
+        app.show_earnings_view()
+        self.root.update_idletasks()
+        self.assertEqual(app.current_view, "earnings")
+        self.assertEqual(app.segmented_nav.get(), "Earnings & Goals")
+        self.assertEqual(app.view_title_var.get(), "💰 Earnings & Goals")
+
+        # Switch back to Time Clock via segmented nav callback
+        app._on_segmented_nav_change("Time Clock")
+        self.root.update_idletasks()
+        self.assertEqual(app.current_view, "time_clock")
+        self.assertEqual(app.segmented_nav.get(), "Time Clock")
+        self.assertEqual(app.view_title_var.get(), "⏱️ Time Clock")
+
+    def test_clock_panel_customtkinter_hero_card_and_chips(self):
+        """Test ClockPanel hero card components, summary chips, caption, and dynamic action button styling."""
+        app = TimeClockApp(root=self.root, engine=self.engine)
+        task = self.engine.create_task("Hero Timer Task")
+        self.root.update_idletasks()
+
+        # Check initial state with selected task
+        self.assertEqual(app.clock_panel.timer_var.get(), "00:00:00")
+        self.assertIn("Idle", app.clock_panel.status_var.get())
+        self.assertEqual(app.clock_panel.toggle_btn.cget("text"), "Clock In")
+        self.assertEqual(app.clock_panel.toggle_btn.cget("fg_color"), theme.SUCCESS)
+        self.assertEqual(app.clock_panel.status_label.cget("text_color"), theme.MUTED)
+        self.assertEqual(app.clock_panel.cget("text"), "Clock Tracker")
+
+        # Verify summary chips exist, have caption, and have day/week/month values
+        self.assertEqual(app.clock_panel.summary_caption_lbl.cget("text"), "All Tasks Summary")
+        self.assertTrue(app.clock_panel.day_time_var.get().startswith("Day:"))
+        self.assertTrue(app.clock_panel.week_time_var.get().startswith("Week:"))
+        self.assertTrue(app.clock_panel.month_time_var.get().startswith("Month:"))
+
+        # Clock in -> dynamic button and status change
+        self.engine.clock_in()
+        self.root.update_idletasks()
+        self.assertIn("Clocked In", app.clock_panel.status_var.get())
+        self.assertEqual(app.clock_panel.toggle_btn.cget("text"), "Clock Out")
+        self.assertEqual(app.clock_panel.toggle_btn.cget("fg_color"), theme.DANGER)
+        self.assertEqual(app.clock_panel.status_label.cget("text_color"), theme.SUCCESS)
+
+        # Simulate time progression for timer tick
+        fake_now = datetime.now()
+        fake_start = fake_now - timedelta(seconds=15)
+        self.engine.state.current_session_start = fake_start.isoformat()
+        self.engine.tick()
+        self.root.update_idletasks()
+        self.assertEqual(app.clock_panel.timer_var.get(), "00:00:15")
+
+        # Clock out
+        self.engine.clock_out()
+        self.root.update_idletasks()
+        self.assertIn("Clocked Out", app.clock_panel.status_var.get())
+        self.assertEqual(app.clock_panel.toggle_btn.cget("text"), "Clock In")
+        self.assertEqual(app.clock_panel.toggle_btn.cget("fg_color"), theme.SUCCESS)
+        self.assertEqual(app.clock_panel.status_label.cget("text_color"), theme.MUTED)
+
+    def test_appearance_mode_change_restyles_treeviews_and_tags(self):
+        """Test switching appearance mode restyles Treeviews and all tag colors dynamically."""
+        import customtkinter as ctk
+        app = TimeClockApp(root=self.root, engine=self.engine)
+        task = self.engine.create_task("Themed Task")
+        self.root.update_idletasks()
+
+        # Switch to Dark Mode
+        ctk.set_appearance_mode("Dark")
+        app._on_appearance_mode_change("Dark")
+        self.root.update_idletasks()
+
+        self.assertEqual(
+            app.style.lookup("Treeview", "background"),
+            theme.resolve_color(theme.BG_CARD, "Dark"),
+        )
+        self.assertEqual(
+            str(app.task_panel.tree.tag_configure("all_reported", "foreground")),
+            theme.resolve_color(theme.TEXT_PRIMARY, "Dark"),
+        )
+        self.assertEqual(
+            str(app.task_panel.tree.tag_configure("has_unreported", "foreground")),
+            theme.resolve_color(theme.TAG_UNREPORTED, "Dark"),
+        )
+        self.assertEqual(
+            str(app.history_panel.tree.tag_configure("reported", "foreground")),
+            theme.resolve_color(theme.TAG_REPORTED, "Dark"),
+        )
+
+        # Switch back to Light Mode
+        ctk.set_appearance_mode("Light")
+        app._on_appearance_mode_change("Light")
+        self.root.update_idletasks()
+
+        self.assertEqual(
+            app.style.lookup("Treeview", "background"),
+            theme.resolve_color(theme.BG_CARD, "Light"),
+        )
+        self.assertEqual(
+            str(app.task_panel.tree.tag_configure("all_reported", "foreground")),
+            theme.resolve_color(theme.TEXT_PRIMARY, "Light"),
+        )
+        self.assertEqual(
+            str(app.task_panel.tree.tag_configure("has_unreported", "foreground")),
+            theme.resolve_color(theme.TAG_UNREPORTED, "Light"),
+        )
+        self.assertEqual(
+            str(app.history_panel.tree.tag_configure("reported", "foreground")),
+            theme.resolve_color(theme.TAG_REPORTED, "Light"),
+        )
+
+    def test_app_cleanup_removes_appearance_callback(self):
+        """Verify on_close unregisters appearance mode callback to prevent stale callbacks."""
+        import customtkinter as ctk
+        app = TimeClockApp(root=self.root, engine=self.engine)
+        self.assertIn(app._on_appearance_mode_change, ctk.AppearanceModeTracker.callback_list)
+
+        app.on_close()
+        self.assertNotIn(app._on_appearance_mode_change, ctk.AppearanceModeTracker.callback_list)
+
+    def test_task_panel_and_history_panel_customtkinter_card_features(self):
+        """Test TaskPanel and HistoryPanel card features, toolbar buttons, and configure/cget support."""
+        app = TimeClockApp(root=self.root, engine=self.engine)
+        task = self.engine.create_task("Card Feature Task")
+        self.root.update_idletasks()
+
+        # TaskPanel buttons and text cget
+        self.assertIsNotNone(app.task_panel.add_btn)
+        self.assertIsNotNone(app.task_panel.rename_btn)
+        self.assertIsNotNone(app.task_panel.options_btn)
+        self.assertIsNotNone(app.task_panel.earnings_btn)
+        self.assertIsNotNone(app.task_panel.report_btn)
+        self.assertIsNotNone(app.task_panel.archive_btn)
+        self.assertEqual(app.task_panel.cget("text"), "Tasks")
+
+        # HistoryPanel text configure and cget
+        self.assertIn("Card Feature Task", app.history_panel.cget("text"))
+        app.history_panel.configure(text="Custom History Title")
+        self.assertEqual(app.history_panel.cget("text"), "Custom History Title")
+        self.assertEqual(app.history_panel["text"], "Custom History Title")
 
 
 if __name__ == "__main__":
