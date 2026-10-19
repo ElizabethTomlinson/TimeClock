@@ -1270,6 +1270,183 @@ class TestGUI(unittest.TestCase):
         mock_showinfo.assert_called_once()
         self.assertIn("No duplicate tasks found", mock_showinfo.call_args[0][1])
 
+    def test_task_panel_column_sorting_cycle(self):
+        app = TimeClockApp(root=self.root, engine=self.engine)
+        panel = app.task_panel
+
+        t1 = self.engine.create_task("Bravo", is_unpaid=False)
+        t2 = self.engine.create_task("Alpha", is_unpaid=True)
+        t3 = self.engine.create_task("Charlie", is_unpaid=False)
+
+        t1.entries.append(TimeEntry(id="e1", start_time="2026-10-01T10:00:00", end_time="2026-10-01T10:05:00", duration_seconds=300.0))
+        t2.entries.append(TimeEntry(id="e2", start_time="2026-10-01T10:00:00", end_time="2026-10-01T10:01:40", duration_seconds=100.0))
+        t3.entries.append(TimeEntry(id="e3", start_time="2026-10-01T10:00:00", end_time="2026-10-01T10:08:20", duration_seconds=500.0))
+        self.engine._save_state()
+
+        panel.refresh_task_list()
+        self.root.update_idletasks()
+
+        self.assertEqual(list(panel.tree.get_children()), [t1.id, t2.id, t3.id])
+
+        # --- Test 1: Task Name Sorting ---
+        panel._on_header_click("name")
+        self.assertEqual(list(panel.tree.get_children()), [t2.id, t1.id, t3.id])
+        self.assertEqual(panel.tree.heading("name")["text"], "Task Name ▲")
+
+        panel._on_header_click("name")
+        self.assertEqual(list(panel.tree.get_children()), [t3.id, t1.id, t2.id])
+        self.assertEqual(panel.tree.heading("name")["text"], "Task Name ▼")
+
+        panel._on_header_click("name")
+        self.assertEqual(list(panel.tree.get_children()), [t1.id, t2.id, t3.id])
+        self.assertEqual(panel.tree.heading("name")["text"], "Task Name")
+
+        # --- Test 2: Total Time Sorting ---
+        panel._on_header_click("total_time")
+        self.assertEqual(list(panel.tree.get_children()), [t3.id, t1.id, t2.id])
+        self.assertEqual(panel.tree.heading("total_time")["text"], "Total Time ▼")
+
+        panel._on_header_click("total_time")
+        self.assertEqual(list(panel.tree.get_children()), [t2.id, t1.id, t3.id])
+        self.assertEqual(panel.tree.heading("total_time")["text"], "Total Time ▲")
+
+        panel._on_header_click("total_time")
+        self.assertEqual(list(panel.tree.get_children()), [t1.id, t2.id, t3.id])
+        self.assertEqual(panel.tree.heading("total_time")["text"], "Total Time")
+
+        # --- Test 3: Unreported Time Sorting ---
+        panel._on_header_click("unreported_time")
+        self.assertEqual(list(panel.tree.get_children()), [t3.id, t1.id, t2.id])
+        self.assertEqual(panel.tree.heading("unreported_time")["text"], "Unreported ▼")
+
+        panel._on_header_click("unreported_time")
+        self.assertEqual(list(panel.tree.get_children()), [t2.id, t1.id, t3.id])
+        self.assertEqual(panel.tree.heading("unreported_time")["text"], "Unreported ▲")
+
+        panel._on_header_click("unreported_time")
+        self.assertEqual(list(panel.tree.get_children()), [t1.id, t2.id, t3.id])
+        self.assertEqual(panel.tree.heading("unreported_time")["text"], "Unreported")
+
+        # --- Test 4: Paid Status Sorting ---
+        panel._on_header_click("paid")
+        self.assertEqual(list(panel.tree.get_children()), [t1.id, t3.id, t2.id])
+        self.assertEqual(panel.tree.heading("paid")["text"], "💰 ▼")
+
+        panel._on_header_click("paid")
+        self.assertEqual(list(panel.tree.get_children()), [t2.id, t1.id, t3.id])
+        self.assertEqual(panel.tree.heading("paid")["text"], "💰 ▲")
+
+        panel._on_header_click("paid")
+        self.assertEqual(list(panel.tree.get_children()), [t1.id, t2.id, t3.id])
+        self.assertEqual(panel.tree.heading("paid")["text"], "💰")
+
+    def test_task_panel_column_switching_resets_previous(self):
+        app = TimeClockApp(root=self.root, engine=self.engine)
+        panel = app.task_panel
+
+        t1 = self.engine.create_task("Bravo")
+        t2 = self.engine.create_task("Alpha")
+        t1.entries.append(TimeEntry(id="e1", start_time="2026-10-01T10:00:00", end_time="2026-10-01T10:01:40", duration_seconds=100.0))
+        t2.entries.append(TimeEntry(id="e2", start_time="2026-10-01T10:00:00", end_time="2026-10-01T10:03:20", duration_seconds=200.0))
+        self.engine._save_state()
+        panel.refresh_task_list()
+
+        panel._on_header_click("name")
+        self.assertEqual(panel.tree.heading("name")["text"], "Task Name ▲")
+        self.assertEqual(list(panel.tree.get_children()), [t2.id, t1.id])
+
+        panel._on_header_click("total_time")
+        self.assertEqual(panel.tree.heading("name")["text"], "Task Name")
+        self.assertEqual(panel.tree.heading("total_time")["text"], "Total Time ▼")
+        self.assertEqual(list(panel.tree.get_children()), [t2.id, t1.id])
+
+    def test_task_panel_sort_preserves_selection(self):
+        app = TimeClockApp(root=self.root, engine=self.engine)
+        panel = app.task_panel
+
+        t1 = self.engine.create_task("Bravo")
+        t2 = self.engine.create_task("Alpha")
+        panel.refresh_task_list()
+
+        panel.tree.selection_set(t1.id)
+        self.assertEqual(panel.tree.selection(), (t1.id,))
+
+        panel._on_header_click("name")
+        self.assertEqual(list(panel.tree.get_children()), [t2.id, t1.id])
+        self.assertEqual(panel.tree.selection(), (t1.id,))
+
+    def test_task_panel_sort_empty_and_single_task(self):
+        app = TimeClockApp(root=self.root, engine=self.engine)
+        panel = app.task_panel
+
+        panel._on_header_click("name")
+        self.assertEqual(list(panel.tree.get_children()), [])
+        self.assertEqual(panel.tree.heading("name")["text"], "Task Name ▲")
+
+        t1 = self.engine.create_task("Solo Task")
+        panel.refresh_task_list()
+        self.assertEqual(list(panel.tree.get_children()), [t1.id])
+        panel._on_header_click("name")
+        self.assertEqual(list(panel.tree.get_children()), [t1.id])
+        self.assertEqual(panel.tree.heading("name")["text"], "Task Name ▼")
+
+    def test_task_panel_sort_case_insensitivity_and_stability(self):
+        app = TimeClockApp(root=self.root, engine=self.engine)
+        panel = app.task_panel
+
+        t1 = self.engine.create_task("bravo")
+        t2 = self.engine.create_task("ALPHA")
+        t3 = self.engine.create_task("Alpha")
+        panel.refresh_task_list()
+
+        panel._on_header_click("name")
+        # Stable sort: ALPHA (t2) comes before Alpha (t3)
+        self.assertEqual(list(panel.tree.get_children()), [t2.id, t3.id, t1.id])
+
+    def test_task_panel_sort_name_ignores_emojis_and_non_alphanumeric(self):
+        app = TimeClockApp(root=self.root, engine=self.engine)
+        panel = app.task_panel
+
+        t1 = self.engine.create_task("🚀 Project Charlie")
+        t2 = self.engine.create_task("[Sprint 1] Project Delta")
+        t3 = self.engine.create_task("⭐ Project Bravo")
+        t4 = self.engine.create_task("Project Alpha")
+        panel.refresh_task_list()
+
+        # Sort A-Z (Primary)
+        panel._on_header_click("name")
+        self.assertEqual(list(panel.tree.get_children()), [t4.id, t3.id, t1.id, t2.id])
+
+        # Sort Z-A (Reverse)
+        panel._on_header_click("name")
+        self.assertEqual(list(panel.tree.get_children()), [t2.id, t1.id, t3.id, t4.id])
+
+        # Clear sort (Default creation order)
+        panel._on_header_click("name")
+        self.assertEqual(list(panel.tree.get_children()), [t1.id, t2.id, t3.id, t4.id])
+
+    def test_task_panel_sort_maintained_across_events(self):
+        app = TimeClockApp(root=self.root, engine=self.engine)
+        panel = app.task_panel
+
+        t1 = self.engine.create_task("Beta")
+        t2 = self.engine.create_task("Alpha")
+        panel.refresh_task_list()
+
+        # Sort A-Z
+        panel._on_header_click("name")
+        self.assertEqual(list(panel.tree.get_children()), [t2.id, t1.id])
+
+        # New task created event triggers refresh_task_list
+        t3 = self.engine.create_task("Gamma")
+        self.root.update_idletasks()
+        self.assertEqual(list(panel.tree.get_children()), [t2.id, t1.id, t3.id])
+
+        # Task renamed
+        self.engine.rename_task(t3.id, "AAA")
+        self.root.update_idletasks()
+        self.assertEqual(list(panel.tree.get_children()), [t3.id, t2.id, t1.id])
+
 
 if __name__ == "__main__":
     unittest.main()

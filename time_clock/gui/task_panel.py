@@ -14,6 +14,14 @@ from time_clock.gui.task_options_dialog import ask_task_options
 from time_clock.models import Task, format_duration
 
 
+COL_HEADINGS = {
+    "paid": "💰",
+    "name": "Task Name",
+    "total_time": "Total Time",
+    "unreported_time": "Unreported",
+}
+
+
 class TaskPanel(ttk.LabelFrame):
     """Panel for creating, listing, selecting, and managing tasks."""
 
@@ -21,6 +29,8 @@ class TaskPanel(ttk.LabelFrame):
         super().__init__(parent, text="Tasks", padding=10)
         self.engine = engine
         self._updating_selection = False
+        self._sort_column: Optional[str] = None
+        self._sort_direction: Optional[str] = None
 
         self._build_ui()
         self._register_events()
@@ -59,10 +69,8 @@ class TaskPanel(ttk.LabelFrame):
             selectmode="browse",
             height=8
         )
-        self.tree.heading("paid", text="💰")
-        self.tree.heading("name", text="Task Name")
-        self.tree.heading("total_time", text="Total Time")
-        self.tree.heading("unreported_time", text="Unreported")
+        for col, text in COL_HEADINGS.items():
+            self.tree.heading(col, text=text, command=lambda c=col: self._on_header_click(c))
         self.tree.column("paid", width=35, minwidth=30, anchor=tk.CENTER, stretch=False)
         self.tree.column("name", width=180, anchor=tk.W)
         self.tree.column("total_time", width=80, anchor=tk.E)
@@ -302,6 +310,67 @@ class TaskPanel(ttk.LabelFrame):
             except Exception as e:
                 messagebox.showerror("Error", str(e), parent=self.winfo_toplevel())
 
+    def _on_header_click(self, col: str) -> None:
+        """Handle clicking a column header to toggle 3-state sorting."""
+        if self._sort_column != col:
+            self._sort_column = col
+            self._sort_direction = "primary"
+        else:
+            if self._sort_direction == "primary":
+                self._sort_direction = "reverse"
+            else:
+                self._sort_column = None
+                self._sort_direction = None
+        self._update_heading_labels()
+        self.refresh_task_list()
+
+    def _update_heading_labels(self) -> None:
+        """Update Treeview column heading text to display active sort arrow indicator."""
+        for col, base_text in COL_HEADINGS.items():
+            if self._sort_column == col and self._sort_direction:
+                if col == "name":
+                    arrow = " ▲" if self._sort_direction == "primary" else " ▼"
+                else:
+                    arrow = " ▼" if self._sort_direction == "primary" else " ▲"
+                self.tree.heading(col, text=f"{base_text}{arrow}")
+            else:
+                self.tree.heading(col, text=base_text)
+
+    def _sort_tasks(self, tasks: list[Task]) -> list[Task]:
+        """Sort tasks according to current sort column and direction."""
+        if not self._sort_column or not self._sort_direction:
+            return tasks
+
+        if self._sort_column == "name":
+            # Primary: A -> Z (ascending), Reverse: Z -> A (descending)
+            # Ignore emojis and non-alphanumeric characters for alphabetical sorting
+            reverse = self._sort_direction == "reverse"
+            return sorted(
+                tasks,
+                key=lambda t: (
+                    "".join(c for c in t.name if c.isalnum()).lower(),
+                    t.name.lower(),
+                ),
+                reverse=reverse,
+            )
+        elif self._sort_column == "total_time":
+            # Primary: Highest to lowest (descending), Reverse: Lowest to highest (ascending)
+            reverse = self._sort_direction == "primary"
+            return sorted(tasks, key=lambda t: t.total_duration_seconds, reverse=reverse)
+        elif self._sort_column == "unreported_time":
+            # Primary: Highest to lowest (descending), Reverse: Lowest to highest (ascending)
+            reverse = self._sort_direction == "primary"
+            return sorted(
+                tasks,
+                key=lambda t: self.engine.get_task_unreported_duration(t.id, include_running=True),
+                reverse=reverse,
+            )
+        elif self._sort_column == "paid":
+            # Primary: Paid (True) first, Reverse: Unpaid (False) first
+            reverse = self._sort_direction == "primary"
+            return sorted(tasks, key=lambda t: not t.is_unpaid, reverse=reverse)
+        return tasks
+
     def _update_summary(self) -> None:
         """Update aggregate unreported tasks count and total unreported duration."""
         count = self.engine.get_unreported_tasks_count(include_running=True)
@@ -311,6 +380,9 @@ class TaskPanel(ttk.LabelFrame):
 
     def refresh_task_list(self) -> None:
         """Reload tasks in the treeview and select the active task."""
+        current_selection = self.tree.selection()
+        selected_id = current_selection[0] if current_selection else None
+
         self._updating_selection = True
         try:
             # Clear existing items
@@ -318,7 +390,8 @@ class TaskPanel(ttk.LabelFrame):
                 self.tree.delete(item)
 
             tasks = self.engine.get_tasks(include_archived=self.show_archived_var.get())
-            for task in tasks:
+            sorted_tasks = self._sort_tasks(tasks)
+            for task in sorted_tasks:
                 paid_icon = "💰" if not task.is_unpaid else ""
                 total_str = format_duration(task.total_duration_seconds)
                 unrep_dur = self.engine.get_task_unreported_duration(task.id, include_running=True)
@@ -334,10 +407,10 @@ class TaskPanel(ttk.LabelFrame):
                     tag = "has_unreported" if unrep_dur > 0.0 else "all_reported"
                 self.tree.insert("", tk.END, iid=task.id, values=(paid_icon, display_name, total_str, unrep_str), tags=(tag,))
 
-            active_id = self.engine.state.active_task_id
-            if active_id and self.tree.exists(active_id):
-                self.tree.selection_set(active_id)
-                self.tree.focus(active_id)
+            target_id = selected_id if (selected_id and self.tree.exists(selected_id)) else self.engine.state.active_task_id
+            if target_id and self.tree.exists(target_id):
+                self.tree.selection_set(target_id)
+                self.tree.focus(target_id)
         finally:
             self._updating_selection = False
         self._update_archive_button_state()

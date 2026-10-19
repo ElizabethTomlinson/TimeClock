@@ -154,6 +154,23 @@ The task table displays your tasks with a paid indicator column alongside their 
 - **Live Synchronization**: As you clock in, clock out, or track active work, the task's unreported time counter, paid indicator, and highlight tag update automatically in real time.
 - **Aggregate Summary Indicator**: A footer summary below the task list displays the total number of projects with outstanding work and cumulative pending duration (e.g., `Unreported: 2 projects (04:15:00)`), ignoring unpaid tasks so your pending billing summary stays accurate.
 
+### Sorting Tasks by Column Headers
+You can quickly sort your task list by clicking on any of the four column headers in the Tasks table:
+- **`💰` (Paid Status)**: Sorts paid tasks first (`💰 ▼`), or unpaid tasks first (`💰 ▲`).
+- **Task Name**: Sorts alphabetically A to Z (`Task Name ▲`), or reverse Z to A (`Task Name ▼`).
+- **Total Time**: Sorts highest total duration first (`Total Time ▼`), or lowest total duration first (`Total Time ▲`).
+- **Unreported**: Sorts highest pending unreported duration first (`Unreported ▼`), or lowest first (`Unreported ▲`).
+
+#### 3-Click Sort Cycle & Reset
+Each column header operates on an intuitive 3-click cycle:
+1. **First Click**: Activates the primary sort order (A-to-Z for task name, highest-to-lowest for time and paid status).
+2. **Second Click**: Reverses the sort order (Z-to-A for task name, lowest-to-highest for time and unpaid status first).
+3. **Third Click**: Clears the sort order and reverts to the default chronological creation order.
+
+#### Visual Indicators & Live Updates
+- **Directional Arrow Glyphs**: The currently active sorted column displays a directional arrow (`▲` or `▼`) indicating the sort dimension, while inactive columns display their base labels.
+- **Selection & Live Timer Stability**: Your selected task remains active and focused when sorting, and your chosen sort order is maintained across live timer ticks and task lifecycle updates.
+
 ### Adding a Task
 1. Click the **New Task...** button at the top of the Tasks panel.
 2. In the modal dialog:
